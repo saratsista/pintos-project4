@@ -31,8 +31,8 @@ struct cache_entry
   struct list_elem elem;
 };
 
-void init_buffer_cache (void);
-void read_cache (block_sector_t, void *);
+void buffer_cache_init (void);
+void read_cache (block_sector_t, int, void *);
 void write_cache (block_sector_t, int, void *);
 struct cache_entry* allocate_cache_entry (void);
 struct cache_entry* find_cache_entry (block_sector_t, bool);

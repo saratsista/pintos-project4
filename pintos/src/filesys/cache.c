@@ -4,7 +4,7 @@
 #include "threads/malloc.h"
 
 void
-init_buffer_cache ()
+buffer_cache_init ()
 {
   lock_init (&cache_lock);
   list_init (&buffer_cache);
@@ -37,12 +37,16 @@ write_cache (block_sector_t sector, int valid_bytes, void *buffer)
 }
 
 void
-read_cache (block_sector_t sector, void *buffer)
+read_cache (block_sector_t sector, int read_bytes, void *buffer)
 {
   int zero_bytes;
   struct cache_entry *entry = find_cache_entry (sector, false);
   if (!entry)
-     entry = find_cache_entry (sector, true);
+    {
+      entry = find_cache_entry (sector, true);
+      block_read (fs_device, sector, entry->data);
+      entry->valid_bytes = read_bytes;
+    }
 
   if (entry)
    {
