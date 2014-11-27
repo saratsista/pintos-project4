@@ -20,14 +20,12 @@ buffer_cache_init ()
 }
 
 void
-write_cache (block_sector_t sector, int valid_bytes, void *buffer)
+cache_write (block_sector_t sector, void *buffer, int valid_bytes)
 {
   struct cache_entry *entry = find_cache_entry (sector, false); 
   if (!entry)
    {
      entry = find_cache_entry (sector, true);
-     if (!entry)
-      PANIC ("Disk Full");
    }
  
   memcpy (entry->data, buffer, valid_bytes);
@@ -37,7 +35,7 @@ write_cache (block_sector_t sector, int valid_bytes, void *buffer)
 }
 
 void
-read_cache (block_sector_t sector, int read_bytes, void *buffer)
+cache_read (block_sector_t sector, void *buffer, int read_bytes)
 {
   int zero_bytes;
   struct cache_entry *entry = find_cache_entry (sector, false);
@@ -48,19 +46,12 @@ read_cache (block_sector_t sector, int read_bytes, void *buffer)
       entry->valid_bytes = read_bytes;
     }
 
-  if (entry)
+  memcpy (buffer, entry->data, entry->valid_bytes);
+  zero_bytes = BLOCK_SECTOR_SIZE - entry->valid_bytes;
+  if (zero_bytes != 0)
    {
-     memcpy (buffer, entry->data, entry->valid_bytes);
-     zero_bytes = BLOCK_SECTOR_SIZE - entry->valid_bytes;
-     if (zero_bytes != 0)
-      {
-        memset (buffer + entry->valid_bytes, 0, zero_bytes);
-      }
+     memset (buffer + entry->valid_bytes, 0, zero_bytes);
    }
-  else
-   {
-     PANIC ("Disk Full!");
-   }     
 }
 
 struct cache_entry *
@@ -81,7 +72,8 @@ allocate_cache_entry ()
 /* Looks for a cache_entry in buffer_cache based on sector number.
    If found, removes and pushes it to front of the list.
    @param: sector_id - sector number of needed cache_entry
-           unused    - Do we need to find an unused cache_entry? */
+           unused    - Do we need to find an unused cache_entry?
+   @retval: pointer to the cache_entry found */
 struct cache_entry *
 find_cache_entry (block_sector_t sector_id, bool unused)
 {
@@ -93,7 +85,7 @@ find_cache_entry (block_sector_t sector_id, bool unused)
        e = list_next (e))
    {
      entry = list_entry (e, struct cache_entry, elem);
-     if (entry->sector == (block_sector_t)sector)
+     if (entry->sector == sector)
       {
        list_remove (e);
        list_push_front (&buffer_cache, &entry->elem);
@@ -114,10 +106,10 @@ find_cache_entry (block_sector_t sector_id, bool unused)
   return NULL;   
 }
 
-bool
+void
 evict_cache_entry ()
 {
-  struct list_elem *e = list_end (&buffer_cache);
+  struct list_elem *e = list_back (&buffer_cache);
   struct cache_entry *entry = list_entry (e, struct cache_entry, elem);
 
   if (entry->dirty)
@@ -126,5 +118,4 @@ evict_cache_entry ()
    }
   list_remove (e);
   free (entry);
-  return true;
 }

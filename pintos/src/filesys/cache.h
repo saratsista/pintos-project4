@@ -32,10 +32,10 @@ struct cache_entry
 };
 
 void buffer_cache_init (void);
-void read_cache (block_sector_t, int, void *);
-void write_cache (block_sector_t, int, void *);
+void cache_read (block_sector_t, void *, int);
+void cache_write (block_sector_t, void *, int);
 struct cache_entry* allocate_cache_entry (void);
 struct cache_entry* find_cache_entry (block_sector_t, bool);
-bool evict_cache_entry (void);
+void evict_cache_entry (void);
 
 #endif /* filesys/cache.h */
