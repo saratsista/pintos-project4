@@ -16,9 +16,12 @@
 struct inode_disk
   {
     block_sector_t start;               /* First data sector. */
+    struct indirect indirect;
+    struct d_indirect d_indirect;
+    enum pointer pointer;
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
+    uint32_t unused[119];               /* Not used. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -37,6 +40,10 @@ struct inode
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+    block_sector_t direct;
+    struct indirect indirect;
+    struct d_indirect d_indirect;
+    off_t length;    
     struct inode_disk data;             /* Inode content. */
   };
 

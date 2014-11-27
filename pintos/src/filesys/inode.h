@@ -5,6 +5,29 @@
 #include "filesys/off_t.h"
 #include "devices/block.h"
 
+/* Enum for different types of pointers in inode_disk */
+enum pointer
+ {
+   DIRECT,		/* Direct pointer to sector on-disk */
+   INDIRECT,		/* Indirect pointer to sectors */
+   DOUBLE_INDIRECT	/* Double Indirect pointer to sectors */
+ };
+
+/* An Indirect Pointer */
+struct indirect
+ {
+   block_sector_t sector;  /* Sector where indirect pointer is present */
+   off_t offset;	   /* offset into SECTOR */
+ };
+
+/* A Double-indirect Pointer */
+struct d_indirect
+ {
+   block_sector_t sector;
+   off_t off1;		  /* Offset into SECTOR */
+   off_t off2;		  /* Offset into sector found at off1 */
+ };
+
 struct bitmap;
 
 void inode_init (void);

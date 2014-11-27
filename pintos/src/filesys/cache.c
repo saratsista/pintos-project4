@@ -28,10 +28,16 @@ cache_write (block_sector_t sector, void *buffer, int valid_bytes)
      entry = find_cache_entry (sector, true);
    }
  
+  lock_acquire (&entry->update_lock);
+  entry->open_count++;
+  lock_release (&entry->update_lock);
   memcpy (entry->data, buffer, valid_bytes);
   entry->sector = sector;
   entry->valid_bytes = valid_bytes;
   entry->dirty = true;
+  lock_acquire (&entry->update_lock);
+  entry->open_count--;
+  lock_release (&entry->update_lock);
 }
 
 void
@@ -46,12 +52,20 @@ cache_read (block_sector_t sector, void *buffer, int read_bytes)
       entry->valid_bytes = read_bytes;
     }
 
+  lock_acquire (&entry->update_lock);
+  entry->open_count++;
+  lock_release (&entry->update_lock);
+
   memcpy (buffer, entry->data, entry->valid_bytes);
   zero_bytes = BLOCK_SECTOR_SIZE - entry->valid_bytes;
   if (zero_bytes != 0)
    {
      memset (buffer + entry->valid_bytes, 0, zero_bytes);
    }
+
+  lock_acquire (&entry->update_lock);
+  entry->open_count--;
+  lock_release (&entry->update_lock);
 }
 
 struct cache_entry *
@@ -109,8 +123,25 @@ find_cache_entry (block_sector_t sector_id, bool unused)
 void
 evict_cache_entry ()
 {
-  struct list_elem *e = list_back (&buffer_cache);
-  struct cache_entry *entry = list_entry (e, struct cache_entry, elem);
+  struct list_elem *e; 
+  struct cache_entry *entry;
+  bool found = false;
+
+  while (true)
+   {
+     for (e = list_rbegin (&buffer_cache); e != list_rend (&buffer_cache);
+          e = list_prev (e))
+      { 
+        entry = list_entry (e, struct cache_entry, elem);
+        if (entry->open_count == 0)
+         {
+           found = true;
+           break;
+         }
+      }
+     if (found)
+       break;
+  }   
 
   if (entry->dirty)
    {
