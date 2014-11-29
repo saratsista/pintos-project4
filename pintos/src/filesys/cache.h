@@ -18,7 +18,7 @@ struct lock cache_lock;
 /* Each cache entry in the buffer_cache */
 struct cache_entry
 {
-  char data[BLOCK_SECTOR_SIZE];	 /* Data block in each cache_entry */
+  char data[BLOCK_SECTOR_SIZE]; /* Data block in each cache_entry */
   block_sector_t sector;	 /* On-disk sector number for the entry */
   bool accessed;
   bool dirty;			 /* Dirty bit for cache_entry */
@@ -32,10 +32,11 @@ struct cache_entry
 };
 
 void buffer_cache_init (void);
-void cache_read (block_sector_t, void *, int);
+struct cache_entry *cache_read (block_sector_t, int);
 void cache_write (block_sector_t, void *, int);
 struct cache_entry* allocate_cache_entry (void);
 struct cache_entry* find_cache_entry (block_sector_t, bool);
 void evict_cache_entry (void);
+void buffer_cache_flush (void);
 
 #endif /* filesys/cache.h */

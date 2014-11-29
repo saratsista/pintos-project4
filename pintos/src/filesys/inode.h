@@ -43,4 +43,8 @@ void inode_deny_write (struct inode *);
 void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
 
+void inode_deallocate (struct inode *);
+int inode_allocate_indirect (block_sector_t, int);
+int inode_allocate_double_indirect (block_sector_t, int);
+
 #endif /* filesys/inode.h */

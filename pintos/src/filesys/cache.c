@@ -20,6 +20,27 @@ buffer_cache_init ()
 }
 
 void
+buffer_cache_flush ()
+{
+  struct list_elem *e;
+  struct cache_entry *entry;
+
+  lock_acquire (&cache_lock);
+  for (e = list_begin (&buffer_cache); e != list_end (&buffer_cache);
+       e = list_next (e))
+    {
+      entry = list_entry (e, struct cache_entry, elem);
+      if (entry->dirty && entry->sector != EMPTY)
+       {
+         block_write (fs_device, entry->sector, entry->data);      
+	 entry->dirty = false;
+         entry->sector = EMPTY;
+       }
+    }
+   lock_release (&cache_lock);
+}
+
+void
 cache_write (block_sector_t sector, void *buffer, int valid_bytes)
 {
   struct cache_entry *entry = find_cache_entry (sector, false); 
@@ -31,17 +52,19 @@ cache_write (block_sector_t sector, void *buffer, int valid_bytes)
   lock_acquire (&entry->update_lock);
   entry->open_count++;
   lock_release (&entry->update_lock);
+
   memcpy (entry->data, buffer, valid_bytes);
   entry->sector = sector;
   entry->valid_bytes = valid_bytes;
   entry->dirty = true;
+
   lock_acquire (&entry->update_lock);
   entry->open_count--;
   lock_release (&entry->update_lock);
 }
 
-void
-cache_read (block_sector_t sector, void *buffer, int read_bytes)
+struct cache_entry *
+cache_read (block_sector_t sector, int read_bytes)
 {
   int zero_bytes;
   struct cache_entry *entry = find_cache_entry (sector, false);
@@ -49,23 +72,24 @@ cache_read (block_sector_t sector, void *buffer, int read_bytes)
     {
       entry = find_cache_entry (sector, true);
       block_read (fs_device, sector, entry->data);
-      entry->valid_bytes = read_bytes;
     }
 
   lock_acquire (&entry->update_lock);
   entry->open_count++;
   lock_release (&entry->update_lock);
 
-  memcpy (buffer, entry->data, entry->valid_bytes);
+  entry->valid_bytes = read_bytes;
+  entry->sector = sector;
   zero_bytes = BLOCK_SECTOR_SIZE - entry->valid_bytes;
   if (zero_bytes != 0)
    {
-     memset (buffer + entry->valid_bytes, 0, zero_bytes);
+     memset (entry->data + read_bytes, 0, zero_bytes);
    }
-
   lock_acquire (&entry->update_lock);
   entry->open_count--;
   lock_release (&entry->update_lock);
+
+  return entry;
 }
 
 struct cache_entry *
@@ -128,7 +152,7 @@ evict_cache_entry ()
   bool found = false;
 
   while (true)
-   {
+  {
      for (e = list_rbegin (&buffer_cache); e != list_rend (&buffer_cache);
           e = list_prev (e))
       { 
