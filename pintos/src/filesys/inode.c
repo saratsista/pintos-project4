@@ -83,7 +83,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
    {
      return inode->direct;
    }
-  else if (sector_index > 0 && sector_index < 129)
+  else if (sector_index > 0 && sector_index <= MAX_SECTOR_INDEX)
    {
      sector_index -= 1;
      return sector_at_index (inode->indirect.sector, sector_index);
@@ -135,6 +135,13 @@ inode_create (block_sector_t sector, off_t length)
 
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
+
+     /* If length is zero, just create the inode and return */
+     if (rem_sectors == 0)
+	{
+	  success = true;
+          goto done;
+	}
 
       /* Allocate direct pointer */
       success = free_map_allocate (1, &disk_inode->direct);
