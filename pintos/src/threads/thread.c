@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include "devices/timer.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -79,6 +80,7 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 struct child_metadata *init_child_metadata (tid_t child_tid);
 list_less_func sleep_list_less_func;
+list_less_func ready_list_less_func;
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -253,7 +255,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, ready_list_less_func, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -324,7 +326,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, ready_list_less_func, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -603,11 +605,20 @@ schedule (void)
 
      if (timer_ticks () > t->wake_time)
        {
-	 list_push_back (&ready_list, &t->elem);
+	 list_insert_ordered (&ready_list, &t->elem, ready_list_less_func,
+			      NULL);
          t->status = THREAD_READY;
          temp = e;
          e = list_next (e);
 	 list_remove (temp);
+
+	 if (t->priority > next->priority)
+	  {
+	    t = next;
+	    next = next_thread_to_run ();
+	    list_insert_ordered (&ready_list, &t->elem, ready_list_less_func,
+				 NULL);
+	  }
        }
      else
        {
@@ -668,4 +679,18 @@ sleep_list_less_func (const struct list_elem *a, const struct list_elem *b, void
   }
   return false;
 }
+
+bool
+ready_list_less_func (const struct list_elem *a, const struct list_elem *b, 
+		      void *aux_data UNUSED)
+{
+  struct thread *ta = list_entry (a, struct thread, elem);
+  struct thread *tb = list_entry (b, struct thread, elem);
+
+  if (ta->priority <= tb->priority) {
+    return true;
+  }
+  return false;
+} 
+
 
