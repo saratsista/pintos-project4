@@ -236,6 +236,8 @@ inode_allocate_double_indirect (block_sector_t di_sector, int sectors_left)
      sectors_left = inode_allocate_indirect (*buffer, sectors_left);
      if (sectors_left == -1)
 	return -1;
+     if (sectors_left == 0)
+       break;
       buffer++;
    }
   block_write (fs_device, di_sector, temp);
