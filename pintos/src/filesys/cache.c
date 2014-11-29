@@ -2,6 +2,11 @@
 #include "filesys/cache.h"
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
+#include "devices/timer.h"
+
+#define FLUSH_FREQUENCY TIMER_FREQ*10
+thread_func write_behind_daemon;
 
 void
 buffer_cache_init ()
@@ -17,8 +22,18 @@ buffer_cache_init ()
      list_push_front (&buffer_cache, &entry->elem);
    }  
   lock_release (&cache_lock);
+
+  /* Create the write_behind daemon */
+  tid_t daemon_tid = thread_create ("write_behind_daemon", PRI_DEFAULT,
+		     		     write_behind_daemon, NULL);    
+  if (daemon_tid == TID_ERROR)
+    PANIC ("Cannot create write-behind daemon!");
 }
 
+/* Function to write all dirty entries in buffer_cache to disk.
+   Run when filesys_done() is called (during shutdown).
+   Also run by the write behind daemon periodically to flush
+   contents to disk */
 void
 buffer_cache_flush ()
 {
@@ -38,6 +53,17 @@ buffer_cache_flush ()
        }
     }
    lock_release (&cache_lock);
+}
+
+/* Function exectued by the write-behind daemon */
+void
+write_behind_daemon (void *aux UNUSED)
+{
+  while (true)
+   {
+     buffer_cache_flush ();
+     timer_sleep (FLUSH_FREQUENCY);
+   }
 }
 
 void

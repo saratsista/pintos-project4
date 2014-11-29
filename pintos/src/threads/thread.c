@@ -29,6 +29,12 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/* List of processes in THREAD_SLEEPING state */
+static struct list sleep_list;
+
+/* Default wake_time for thread when initialized */
+#define DEFAULT_WAKETIME 0LL
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -72,6 +78,7 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 struct child_metadata *init_child_metadata (tid_t child_tid);
+list_less_func sleep_list_less_func;
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -94,6 +101,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -471,6 +479,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  t->wake_time = DEFAULT_WAKETIME;
   list_init (&t->child_meta_list);
 
   old_level = intr_disable ();
@@ -581,10 +590,30 @@ schedule (void)
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
+  struct list_elem *e = list_begin (&sleep_list);
 
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
+
+  while (e != list_end (&sleep_list))
+   {
+     struct thread *t = list_entry (e, struct thread, slpelem); 
+     struct list_elem *temp;
+
+     if (timer_ticks () > t->wake_time)
+       {
+	 list_push_back (&ready_list, &t->elem);
+         t->status = THREAD_READY;
+         temp = e;
+         e = list_next (e);
+	 list_remove (temp);
+       }
+     else
+       {
+	 e = list_next (e);
+       }
+   }
 
   if (cur != next)
     prev = switch_threads (cur, next);
@@ -608,3 +637,35 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Changes the state of current thread to THREAD_SLEEPING.
+   Pushes the thread to sleep_list and calls schedule () */
+void
+thread_sleep (uint64_t ticks)
+{
+ struct thread *cur = thread_current ();
+  enum intr_level old_level;
+ 
+  old_level = intr_disable ();
+  if (cur != idle_thread) {
+    list_insert_ordered (&sleep_list, &cur->slpelem, &sleep_list_less_func,
+			 NULL);
+    cur->status = THREAD_SLEEPING;
+    cur->wake_time = timer_ticks () + ticks;
+    schedule ();
+  }
+  intr_set_level (old_level);  
+}
+
+bool
+sleep_list_less_func (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+  struct thread *t1 = list_entry (a, struct thread, slpelem);
+  struct thread *t2 = list_entry (b, struct thread, slpelem);
+
+  if (t1->wake_time < t2->wake_time) { 
+    return true;
+  }
+  return false;
+}
+

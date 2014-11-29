@@ -158,7 +158,8 @@ inode_create (block_sector_t sector, off_t length)
       /* Allocate indirect pointer */
       if(!free_map_allocate (1, &disk_inode->indirect.sector))
          goto done;
-      rem_sectors = inode_allocate_indirect (disk_inode->indirect.sector, rem_sectors);
+      rem_sectors = inode_allocate_indirect (disk_inode->indirect.sector,
+					     rem_sectors);
       if (rem_sectors == -1)
         {
 	  success = false;
@@ -201,16 +202,14 @@ int
 inode_allocate_indirect (block_sector_t indirect, int sectors_left)
 {
   int i;
-  block_sector_t *buffer = malloc (BLOCK_SECTOR_SIZE);
-  block_sector_t *temp = buffer;
+  block_sector_t *buffer = calloc (1, BLOCK_SECTOR_SIZE);
 
-  block_read (fs_device, indirect, temp);
+  block_read (fs_device, indirect, buffer);
   for (i = 0; i < MAX_SECTOR_INDEX; i++)
     {
-      if (!free_map_allocate (1, temp))
+      if (!free_map_allocate (1, (buffer + i)))
 	return -1;
-      block_write (fs_device, *temp, zeros);
-      temp++;
+      block_write (fs_device, *(buffer + i), zeros);
       sectors_left--;
       if (sectors_left == 0)
         break;
@@ -225,23 +224,20 @@ inode_allocate_double_indirect (block_sector_t di_sector, int sectors_left)
 {
   int j;
   block_sector_t *buffer = calloc (1, BLOCK_SECTOR_SIZE);
-  block_sector_t *temp = buffer;
-
 
   block_read (fs_device, di_sector, buffer);
   for (j = 0; j < MAX_SECTOR_INDEX; j++)
    {
-     if (!free_map_allocate (1, buffer))
+     if (!free_map_allocate (1, (buffer + j)))
        return -1;
-     sectors_left = inode_allocate_indirect (*buffer, sectors_left);
+     sectors_left = inode_allocate_indirect (*(buffer+j), sectors_left);
      if (sectors_left == -1)
 	return -1;
      if (sectors_left == 0)
        break;
-      buffer++;
    }
-  block_write (fs_device, di_sector, temp);
-  free (temp);
+  block_write (fs_device, di_sector, buffer);
+  free (buffer);
   return sectors_left;
 }
 
@@ -333,7 +329,7 @@ void
 inode_deallocate (struct inode *inode)
 {
    block_sector_t sector, dsector;
-   struct cache_entry *entry, *dentry;
+   struct cache_entry *entry = NULL, *dentry = NULL;
    block_sector_t *dbuffer, *ibuffer;
    int i,j,k;
 
@@ -372,6 +368,11 @@ inode_deallocate (struct inode *inode)
        ibuffer++;
      }
     free_map_release (inode->d_indirect.sector, 1);   
+
+  if (entry)
+    entry->sector = EMPTY;
+  if (dentry)
+    dentry->sector = EMPTY;
 }
 
 /* Marks INODE to be deleted when it is closed by the last caller who
