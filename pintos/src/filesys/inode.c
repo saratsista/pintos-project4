@@ -46,7 +46,7 @@ struct inode
     block_sector_t direct;
     struct indirect indirect;
     struct d_indirect d_indirect;
-    off_t length;    
+    off_t length;    			/* Length of file stored at this inode */
   };
 
 /* Given a sector SECTOR and and index INDEX into the SECTOR,
@@ -67,8 +67,7 @@ sector_at_index (block_sector_t sector, off_t index)
 
 /* Returns the block device sector that contains byte offset POS
    within INODE.
-   Returns -1 if INODE does not contain data for a byte at offset
-   POS. */
+   Returns -1 if INODE does not contain data at offset POS. */
 static block_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
@@ -132,7 +131,6 @@ inode_create (block_sector_t sector, off_t length)
   if (disk_inode != NULL)
     {
       int rem_sectors = bytes_to_sectors (length);
-
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
 
@@ -197,18 +195,25 @@ done:
   return success;
 }
 
-/* Allocates sectors for indirect pointers for a file */
+/* Allocates sectors for indirect pointers for a file
+   Returns -1 if allocation fails. 
+   Else, returns the number of sectors remaining that
+   need to be allocated.  */
 int
 inode_allocate_indirect (block_sector_t indirect, int sectors_left)
 {
   int i;
-  block_sector_t *buffer = calloc (1, BLOCK_SECTOR_SIZE);
+  block_sector_t *buffer = malloc (BLOCK_SECTOR_SIZE);
 
   block_read (fs_device, indirect, buffer);
+  memset (buffer, 0 ,BLOCK_SECTOR_SIZE);
   for (i = 0; i < MAX_SECTOR_INDEX; i++)
     {
       if (!free_map_allocate (1, (buffer + i)))
+       {
+        free (buffer);
 	return -1;
+       }
       block_write (fs_device, *(buffer + i), zeros);
       sectors_left--;
       if (sectors_left == 0)
@@ -223,20 +228,26 @@ int
 inode_allocate_double_indirect (block_sector_t di_sector, int sectors_left)
 {
   int j;
-  block_sector_t *buffer = calloc (1, BLOCK_SECTOR_SIZE);
+  block_sector_t *buffer = malloc (BLOCK_SECTOR_SIZE);
 
   block_read (fs_device, di_sector, buffer);
+  memset (buffer, 0 ,BLOCK_SECTOR_SIZE);
   for (j = 0; j < MAX_SECTOR_INDEX; j++)
    {
      if (!free_map_allocate (1, (buffer + j)))
-       return -1;
+      {
+        sectors_left = -1;
+        goto done;
+      }
+     block_write (fs_device, di_sector, buffer);
      sectors_left = inode_allocate_indirect (*(buffer+j), sectors_left);
      if (sectors_left == -1)
-	return -1;
+        goto done;
      if (sectors_left == 0)
        break;
    }
-  block_write (fs_device, di_sector, buffer);
+
+done:
   free (buffer);
   return sectors_left;
 }
@@ -455,7 +466,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
         break;
 
       entry = cache_read (sector_idx, BLOCK_SECTOR_SIZE);
-      memcpy ((uint8_t *)entry->data + sector_ofs, buffer + bytes_written, chunk_size);
+      memcpy (entry->data + sector_ofs, buffer + bytes_written, chunk_size);
       cache_write (sector_idx, entry->data, chunk_size);
 
       /* Advance. */
