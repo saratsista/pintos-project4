@@ -208,6 +208,8 @@ inode_allocate_indirect (struct indirect *indirect, int index, int sectors_left)
   block_sector_t *buffer = malloc (BLOCK_SECTOR_SIZE);
 
   block_read (fs_device, indirect->sector, buffer);
+  if (index == 0)
+    memset (buffer, 0, MAX_SECTOR_INDEX);
   for (i = index; i < MAX_SECTOR_INDEX; i++)
     {
       if (!free_map_allocate (1, (buffer + i)))
@@ -219,7 +221,7 @@ inode_allocate_indirect (struct indirect *indirect, int index, int sectors_left)
       sectors_left--;
       if (sectors_left == 0)
        { 
-         indirect->offset = i;
+         indirect->offset = i+1;
          break;
        }
     }
@@ -237,6 +239,8 @@ inode_allocate_double_indirect (struct d_indirect *d_indirect, int index,
   struct indirect indirect;
 
   block_read (fs_device, d_indirect->sector, buffer);
+  if (index == 0)
+    memset (buffer, 0, MAX_SECTOR_INDEX);
   for (j = index; j < MAX_SECTOR_INDEX; j++)
    {
      if (!free_map_allocate (1, (buffer + j)))
@@ -251,7 +255,7 @@ inode_allocate_double_indirect (struct d_indirect *d_indirect, int index,
         goto done;
      if (sectors_left == 0)
       {
-        d_indirect->off1 = j;
+        d_indirect->off1 = j+1;
         d_indirect->off2 = indirect.offset;
         break;
       }
@@ -462,7 +466,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
   /* If offset is greater than current length of the file
      grow the file */
-  if (offset > inode->length)
+  if ((size + offset) > inode->length)
    {
      lock_acquire (&inode->growth_lock);
      if (!grow_file (inode, offset + size))
@@ -577,7 +581,7 @@ grow_file (struct inode *inode, off_t offset)
           	goto done;
               }
        case INDIRECT:
-          if (disk_inode->indirect.offset < (MAX_SECTOR_INDEX - 1))
+          if (disk_inode->indirect.offset < MAX_SECTOR_INDEX)
 	   {
 	     new_sectors = inode_allocate_indirect (&disk_inode->indirect,
 				disk_inode->indirect.offset, new_sectors);
@@ -611,7 +615,17 @@ grow_file (struct inode *inode, off_t offset)
     } 
 done:
    if (success)
+    {
+     /* Update disk_inode and write it to disk */
+     disk_inode->length = offset;
      block_write (fs_device, inode->sector, disk_inode);  
+     /* Update in-memory inode */ 
+     inode->length = disk_inode->length;
+     inode->direct = disk_inode->direct;
+     inode->indirect = disk_inode->indirect;
+     inode->d_indirect = disk_inode->d_indirect;
+    }
+     
    free (disk_inode);
    return success;
 }
