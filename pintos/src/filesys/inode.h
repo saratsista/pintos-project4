@@ -8,6 +8,7 @@
 /* Enum for different types of pointers in inode_disk */
 enum pointer
  {
+   NONE,
    DIRECT,		/* Direct pointer to sector on-disk */
    INDIRECT,		/* Indirect pointer to sectors */
    DOUBLE_INDIRECT	/* Double Indirect pointer to sectors */
@@ -44,7 +45,9 @@ void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
 
 void inode_deallocate (struct inode *);
-int inode_allocate_indirect (block_sector_t, int);
-int inode_allocate_double_indirect (block_sector_t, int);
+int inode_allocate_indirect (struct indirect *, int, int);
+int inode_allocate_double_indirect (struct d_indirect *, int, int);
+
+bool grow_file (struct inode *, off_t); 
 
 #endif /* filesys/inode.h */

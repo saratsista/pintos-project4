@@ -219,6 +219,14 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* Yield if current thread has lower priority than t */
+  enum intr_level old_level = intr_disable (); 
+  struct thread *cur = thread_current ();
+  if (cur != idle_thread && priority > cur->priority) {
+    thread_yield ();
+  }
+  intr_set_level (old_level);
+
   return tid;
 }
 

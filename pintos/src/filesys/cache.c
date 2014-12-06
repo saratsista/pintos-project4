@@ -5,7 +5,7 @@
 #include "threads/thread.h"
 #include "devices/timer.h"
 
-#define FLUSH_FREQUENCY TIMER_FREQ*3
+#define FLUSH_FREQUENCY 5 
 thread_func write_behind_daemon;
 
 void
@@ -24,7 +24,7 @@ buffer_cache_init ()
   lock_release (&cache_lock);
 
   /* Create the write_behind daemon */
-  tid_t daemon_tid = thread_create ("write_behind_daemon", PRI_MIN,
+  tid_t daemon_tid = thread_create ("write_behind_daemon", PRI_MAX - 1,
 		     		     write_behind_daemon, NULL);    
   if (daemon_tid == TID_ERROR)
     PANIC ("Cannot create write-behind daemon!");
@@ -49,7 +49,6 @@ buffer_cache_flush ()
        {
          block_write (fs_device, entry->sector, entry->data);      
 	 entry->dirty = false;
-         entry->sector = EMPTY;
        }
     }
    lock_release (&cache_lock);
