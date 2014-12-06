@@ -90,7 +90,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
    }
   else
    {
-     sector_index -= MAX_SECTOR_INDEX;
+     sector_index -= (MAX_SECTOR_INDEX + 1);
      off_t d_indirect_index = sector_index / MAX_SECTOR_INDEX;
      block_sector_t tmp = sector_at_index (inode->d_indirect.sector,
 					   d_indirect_index);
@@ -249,7 +249,7 @@ inode_allocate_double_indirect (struct d_indirect *d_indirect, int index,
         goto done;
       }
      indirect.sector = *(buffer + j);
-     block_write (fs_device, d_indirect->sector, buffer);
+     indirect.offset = 0;
      sectors_left = inode_allocate_indirect (&indirect, 0, sectors_left);
      if (sectors_left == -1)
         goto done;
@@ -262,6 +262,8 @@ inode_allocate_double_indirect (struct d_indirect *d_indirect, int index,
    }
 
 done:
+  if (sectors_left != -1)
+     block_write (fs_device, d_indirect->sector, buffer);
   free (buffer);
   return sectors_left;
 }
