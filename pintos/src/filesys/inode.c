@@ -208,8 +208,6 @@ inode_allocate_indirect (struct indirect *indirect, int index, int sectors_left)
   block_sector_t *buffer = malloc (BLOCK_SECTOR_SIZE);
 
   block_read (fs_device, indirect->sector, buffer);
-  if (index == 0)
-    memset (buffer, 0, MAX_SECTOR_INDEX);
   for (i = index; i < MAX_SECTOR_INDEX; i++)
     {
       if (!free_map_allocate (1, (buffer + i)))
@@ -217,13 +215,12 @@ inode_allocate_indirect (struct indirect *indirect, int index, int sectors_left)
         free (buffer);
 	return -1;
        }
+      //printf (">>> sector allocated: %d\n",*(buffer+i)); 
       block_write (fs_device, *(buffer + i), zeros);
       sectors_left--;
+      indirect->offset = i+1;
       if (sectors_left == 0)
-       { 
-         indirect->offset = i+1;
          break;
-       }
     }
   block_write (fs_device, indirect->sector, buffer);
   free (buffer);
@@ -239,26 +236,22 @@ inode_allocate_double_indirect (struct d_indirect *d_indirect, int index,
   struct indirect indirect;
 
   block_read (fs_device, d_indirect->sector, buffer);
-  if (index == 0)
-    memset (buffer, 0, MAX_SECTOR_INDEX);
   for (j = index; j < MAX_SECTOR_INDEX; j++)
    {
-     if (!free_map_allocate (1, (buffer + j)))
-      {
-        sectors_left = -1;
-        goto done;
-      }
+    if (!free_map_allocate (1, (buffer + j)))
+     {
+       sectors_left = -1;
+       goto done;
+     }
+     //printf (">>> sector allocated: %d\n",*(buffer+j)); 
      indirect.sector = *(buffer + j);
-     indirect.offset = 0;
      sectors_left = inode_allocate_indirect (&indirect, 0, sectors_left);
+     d_indirect->off1 = j;
+     d_indirect->off2 = indirect.offset;
      if (sectors_left == -1)
         goto done;
      if (sectors_left == 0)
-      {
-        d_indirect->off1 = j+1;
-        d_indirect->off2 = indirect.offset;
         break;
-      }
    }
 
 done:
@@ -427,6 +420,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       /* Disk sector to read, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
+      //printf ("sector to read: %d\n", sector_idx);
+      //printf ("offset to read: %d\n", offset);
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
       off_t inode_left = inode_length (inode) - offset;
@@ -548,7 +543,7 @@ grow_file (struct inode *inode, off_t offset)
   struct inode_disk *disk_inode = calloc (1, sizeof (struct inode_disk));
 
   block_read (fs_device, inode->sector, disk_inode);
-
+  //printf (">>> sectors to allocate: %d\n", new_sectors);
   switch (disk_inode->pointer) 
    {
      case NONE:
@@ -557,6 +552,8 @@ grow_file (struct inode *inode, off_t offset)
 	    success = false;	
 	    goto done;
           }
+          block_write (fs_device, disk_inode->direct, zeros);
+	  //printf (">>> Direct sector allocated: %d\n", disk_inode->direct);
           new_sectors--;
           if (new_sectors == 0)
             {
@@ -569,43 +566,50 @@ grow_file (struct inode *inode, off_t offset)
 	      success = false;
 	      goto done;   
 	    }
+	    //printf (">>> indirect sector allocated: %d\n", disk_inode->indirect.sector);
             new_sectors = inode_allocate_indirect (&disk_inode->indirect,
 						 0, new_sectors);
-            
+  	    //printf (">>> sectors to allocate: %d\n", new_sectors);
+            //printf ("Indirect pointer offset: %d\n", disk_inode->indirect.offset);
+            disk_inode->d_indirect.off2 = disk_inode->indirect.offset; 
             if (new_sectors == -1)
              {
 	 	 success = false;
 	  	 goto done;
 	     }
-      	     else if (new_sectors == 0)
+      	     else if (new_sectors >= 0 && new_sectors < MAX_SECTOR_INDEX)
 	      {
           	disk_inode->pointer = INDIRECT;
-          	goto done;
+		if (new_sectors == 0)
+                  goto done;
               }
        case INDIRECT:
           if (disk_inode->indirect.offset < MAX_SECTOR_INDEX)
 	   {
 	     new_sectors = inode_allocate_indirect (&disk_inode->indirect,
 				disk_inode->indirect.offset, new_sectors);
+            //printf ("Indirect pointer offset: %d\n", disk_inode->indirect.offset);
+            disk_inode->d_indirect.off2 = disk_inode->indirect.offset; 
             if (new_sectors == -1)
              {
 	 	 success = false;
 	  	 goto done;
 	     }
-	     else if (new_sectors > 0)
-	      {
-		if (!free_map_allocate (1, &disk_inode->d_indirect.sector))
-		  {
-		   success = false;
-		   goto done;
-		  }
-		 disk_inode->pointer = DOUBLE_INDIRECT;
-	      }
       	     else if (new_sectors == 0)
 	      {
           	goto done;
               }
 	   }
+	  else 
+	   {
+	     if (!free_map_allocate (1, &disk_inode->d_indirect.sector))
+	      {
+		 success = false;
+		 goto done;
+	      }
+	      //printf (">>> double indirect sector allocated: %d\n", disk_inode->d_indirect.sector);
+	      disk_inode->pointer = DOUBLE_INDIRECT;
+           }
        case DOUBLE_INDIRECT:
 	   new_sectors = inode_allocate_double_indirect (&disk_inode->d_indirect,
 					disk_inode->d_indirect.off1, new_sectors);
