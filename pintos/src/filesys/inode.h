@@ -45,8 +45,8 @@ void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
 
 void inode_deallocate (struct inode *);
-int inode_allocate_indirect (struct indirect *, int, int);
-int inode_allocate_double_indirect (struct d_indirect *, int, int);
+int inode_allocate_indirect (struct indirect *,int);
+int inode_allocate_double_indirect (struct d_indirect *,int);
 
 bool grow_file (struct inode *, off_t); 
 
