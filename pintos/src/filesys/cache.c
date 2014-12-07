@@ -5,7 +5,7 @@
 #include "threads/thread.h"
 #include "devices/timer.h"
 
-#define FLUSH_FREQUENCY 50
+#define FLUSH_FREQUENCY 5
 thread_func write_behind_daemon;
 
 void

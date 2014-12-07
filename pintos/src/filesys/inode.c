@@ -216,7 +216,7 @@ inode_allocate_indirect (struct indirect *indirect, int sectors_left)
         free (buffer);
 	return -1;
        }
-      //printf (">>> sector allocated: %d\n",*(buffer+i)); 
+      //printf (">>> sector allocated: %d\n",*(buffer+indirect->offset)); 
       block_write (fs_device, *(buffer + indirect->offset), zeros);
       sectors_left--;
       indirect->offset++;
@@ -606,7 +606,7 @@ grow_file (struct inode *inode, off_t offset)
 	  	 goto done;
 	     }
 	   }
-	  else//if (disk_inode->indirect.offset == MAX_SECTOR_INDEX) 
+	  if (new_sectors > 0)//(disk_inode->indirect.offset == MAX_SECTOR_INDEX) 
 	   {
 	     if (!free_map_allocate (1, &disk_inode->d_indirect.sector))
 	      {
