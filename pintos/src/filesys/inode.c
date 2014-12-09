@@ -24,8 +24,9 @@ struct inode_disk
     struct d_indirect d_indirect;
     enum pointer pointer;
     off_t length;                       /* File size in bytes. */
+    bool is_directory;			/* Is this file a directory? */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[119];               /* Not used. */
+    uint32_t unused[118];               /* Not used. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -47,6 +48,7 @@ struct inode
     block_sector_t direct;
     struct indirect indirect;
     struct d_indirect d_indirect;
+    bool is_directory;
     off_t length;    			/* Length of file stored at this inode */
     struct lock growth_lock;
   };
@@ -59,13 +61,10 @@ static block_sector_t
 sector_at_index (block_sector_t sector, off_t index)
 {
   block_sector_t indirect_sector;
-//  struct cache_entry *entry;
   block_sector_t *buffer = calloc (1, BLOCK_SECTOR_SIZE); 
   block_read (fs_device, sector, buffer);
-//  block_sector_t *buffer = (block_sector_t *)entry->data;
   buffer += index;
   memcpy (&indirect_sector, buffer, sizeof (block_sector_t));
- // free (buffer);
   return indirect_sector;
 }
 
@@ -120,7 +119,7 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, bool directory)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
@@ -138,6 +137,7 @@ inode_create (block_sector_t sector, off_t length)
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
       disk_inode->pointer = NONE;
+      disk_inode->is_directory = directory;
 
      /* If length is zero, just create the inode and return */
      if (rem_sectors == 0)
@@ -305,6 +305,7 @@ inode_open (block_sector_t sector)
   inode->indirect = disk_inode.indirect;
   inode->d_indirect = disk_inode.d_indirect;
   inode->length = disk_inode.length;
+  inode->is_directory = disk_inode.is_directory;
   lock_init (&inode->growth_lock);
   return inode;
 }
@@ -323,6 +324,13 @@ block_sector_t
 inode_get_inumber (const struct inode *inode)
 {
   return inode->sector;
+}
+
+/* Returns TRUE if INODE is a directory. FALSE otherwise */
+bool
+inode_is_directory (struct inode *inode)
+{
+  return inode->is_directory;
 }
 
 /* Closes INODE and writes it to disk.

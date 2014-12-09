@@ -110,6 +110,9 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  memset (initial_thread->cwd, 0, MAX_PATH);
+  memcpy (initial_thread->cwd, "/", 2);
+  initial_thread->cwd_sector = ROOT_DIR_SECTOR;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -179,6 +182,7 @@ thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
   struct thread *t;
+  struct thread *cur = thread_current ();
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
@@ -219,9 +223,12 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* Set the current working directory */
+  memcpy (t->cwd, cur->cwd, MAX_PATH);
+  t->cwd_sector = cur->cwd_sector;
+
   /* Yield if current thread has lower priority than t */
   enum intr_level old_level = intr_disable (); 
-  struct thread *cur = thread_current ();
   if (cur != idle_thread && priority > cur->priority) {
     thread_yield ();
   }

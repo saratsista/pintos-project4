@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir 
@@ -24,9 +25,41 @@ struct dir_entry
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
-dir_create (block_sector_t sector, size_t entry_cnt)
+dir_create (block_sector_t sector, size_t entry_cnt, const char *name)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+   off_t off = 0;
+   struct thread *cur = thread_current ();
+   if (!inode_create (sector, entry_cnt * sizeof (struct dir_entry), true))
+     return false;
+
+   struct inode *inode = inode_open (sector);
+   if (inode == NULL)
+     return false;
+   struct dir *new_dir = dir_open (inode);
+   struct dir_entry *dots = calloc (1, sizeof (struct dir_entry));
+
+   dots->inode_sector = inode_get_inumber(inode);
+   memcpy (dots->name, ".", 2);
+   dots->in_use = true;
+   if ((inode_write_at (inode, dots, sizeof dots, off) != sizeof dots)
+	&& (!dir_add (new_dir, name, dots->inode_sector)))
+        return false;
+    off += sizeof dots;
+   
+   memset (dots->name, 0, NAME_MAX+1);
+   memcpy (dots->name, "..", 3);
+   if (sector == ROOT_DIR_SECTOR)
+      dots->inode_sector = inode_get_inumber (inode);
+   else
+     dots->inode_sector = inode_get_inumber (inode_open (cur->cwd_sector));
+
+   if ((inode_write_at (inode, dots, sizeof dots, off) != sizeof dots)
+	&& (!dir_add (new_dir, name, dots->inode_sector)))
+        return false;
+  
+   dir_close (new_dir);
+   free (dots);
+   return true;
 }
 
 /* Opens and returns the directory for the given INODE, of which

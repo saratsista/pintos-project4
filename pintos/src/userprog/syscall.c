@@ -113,6 +113,16 @@ syscall_handler (struct intr_frame *f)
        get_arguments (sp, &args[0], 2);
        seek ((int)args[0], (unsigned)args[1]);
        break; 
+
+    case SYS_MKDIR:
+       get_arguments (sp, &args[0], 1);
+       f->eax = mkdir ((const char*)args[0]);
+       break;
+
+    case SYS_CHDIR:
+       get_arguments (sp, &args[0], 1);
+       f->eax = chdir ((const char*)args[0]);
+       break; 
   }
 }
 
@@ -140,9 +150,6 @@ validate_pointer (void *ptr)
 void
 exit (int status)
 {
- /* XXX: TODO
-    If the current thread exits, then it should be removed from its
-    parent's child list. */
   struct thread *cur = thread_current ();
   cur->md->exit_status = status;
   sema_up (&cur->md->completed);
@@ -161,6 +168,7 @@ create (const char *file_name, unsigned size)
   lock_release (&filesys_lock);
   return return_value;
 }
+
 int
 open (const char *file)
 {
@@ -312,4 +320,30 @@ wait (pid_t pid)
   return process_wait((tid_t)pid);
 }
 
+bool
+mkdir (const char *dir)
+{
+  return dirsys_create (dir);   
+}
 
+bool
+chdir (const char *dir)
+{
+  if (strlen (dir) > MAX_PATH)
+   return false;
+  
+  struct thread *cur = thread_current ();
+  char *abs_path;
+
+  memset (cur->cwd, 0, MAX_PATH);
+  abs_path = filesys_get_absolute_path (dir);
+
+  if (abs_path == NULL)
+    return false;
+
+  if (strlcpy (cur->cwd, abs_path, MAX_PATH) != strlen (abs_path))
+    return false;
+
+  free (abs_path);
+  return true;  
+}

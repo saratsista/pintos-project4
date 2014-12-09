@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "filesys/file.h"
 #include "threads/synch.h"
+#include "filesys/directory.h"
+#include "filesys/filesys.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -29,6 +31,8 @@ typedef int tid_t;
 
 /* Maximum file descriptors for a process */
 #define MAX_FD 128
+/* Maximum path length */
+#define MAX_PATH 256
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -108,6 +112,8 @@ struct thread
     struct child_metadata *md;
 #endif
 
+    char cwd[MAX_PATH];			/* Current Working Directory */
+    block_sector_t cwd_sector;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
