@@ -335,7 +335,6 @@ chdir (const char *dir)
   struct thread *cur = thread_current ();
   char *abs_path;
 
-  memset (cur->cwd, 0, MAX_PATH);
   abs_path = filesys_get_absolute_path (dir);
 
   if (abs_path == NULL)

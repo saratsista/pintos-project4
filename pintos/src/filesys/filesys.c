@@ -81,7 +81,7 @@ done:
 struct file *
 filesys_open (const char *name)
 {
-  struct dir *dir = dir_open_root ();
+  struct dir *dir = filesys_parent_dir (name); 
   struct inode *inode = NULL;
 
   if (dir != NULL)
@@ -144,16 +144,15 @@ dirsys_create (const char *name)
   return success;
 }
 
-/* Returns the parent directory of the leaf file in path NAME 
+/* Returns the parent directory of the leaf node in path NAME 
    Returns NULL if any directory in the path is invalid or
 		if any directory in path has name > NAME_MAX + 1 or
 		if any directory in the path is not a child of parent.
-*/
+   Accepts both absolute and relative paths.  */
 struct dir *
 filesys_parent_dir (const char *name)
 {
   struct thread *cur = thread_current ();
-//  char *name = _name;
   char *save_ptr, *token;
   struct inode *inode = NULL;
   struct dir *start, *next;
@@ -168,11 +167,6 @@ filesys_parent_dir (const char *name)
     return start;
    }
 
-  /* Check if the first character in NAME is '\'. 
-     If so, start is root */
-  if (*name == '/')
-    start = dir_open_root ();
-  
   for (token = strtok_r ((char *)name, "/", &save_ptr); token != NULL;
        token = strtok_r (NULL, "/", &save_ptr))
    {
@@ -205,23 +199,30 @@ filesys_get_absolute_path (const char *_rel_path)
   char *abs_path = calloc (1, MAX_PATH);
   char *rel_path = (char *)_rel_path;
   struct thread *t = thread_current ();
-  char *save_ptr;
+  char *save_ptr, *token;
   
   if (*rel_path == '/')
    {
-    strlcpy (abs_path, rel_path, MAX_PATH);
-    return abs_path;
+    strlcpy (abs_path, "/", MAX_PATH);
+   }
+  else
+   {
+     strlcpy (abs_path, t->cwd, MAX_PATH);
    }
 
-  if (*rel_path != '.')
-     goto done;
-
-  strtok_r (rel_path, "/", &save_ptr);
-  rel_path = save_ptr;
-         
+  token = strtok_r (rel_path, "/", &save_ptr);
+  do
+   {
+     if (strcmp (token, "..") == 0)
+      {
+        *(strrchr (abs_path, '/')) ='\0';
+      }  
+     else if(*token != '.')
+       {
+         strlcat (abs_path, token, MAX_PATH);
+       }
+      token = strtok_r (NULL, "/'", &save_ptr);
+    } while (token != NULL);
    
-done:
-     strlcpy (abs_path, t->cwd, MAX_PATH);
-     strlcat (abs_path, rel_path, MAX_PATH);
      return abs_path;
 }
