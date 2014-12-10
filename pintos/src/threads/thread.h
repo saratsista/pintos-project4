@@ -112,7 +112,7 @@ struct thread
     struct child_metadata *md;
 #endif
 
-    char cwd[MAX_PATH];			/* Current Working Directory */
+    char cwd[MAX_PATH + 1];		/* Current Working Directory */
     block_sector_t cwd_sector;
     bool cwd_deleted;
     /* Owned by thread.c. */

@@ -89,8 +89,9 @@ struct file *
 filesys_open (const char *_name)
 {
   char *file_name;
+  struct thread *t = thread_current ();
 
-  if (thread_current ()->cwd_deleted == true)
+  if (t->cwd_deleted == true)
     return NULL;
 
   if (strcmp (_name, "/") == 0)
@@ -98,8 +99,12 @@ filesys_open (const char *_name)
       return (struct file *)dir_open_root ();
     }
 
-  char *name = calloc (1, strlen (_name)+1);
-  strlcpy (name, _name, strlen (_name)+1);
+  char *name = calloc (1, MAX_PATH + 1);
+  if (strcmp (_name, ".") == 0)
+    strlcpy (name, t->cwd, strlen (t->cwd));
+  else
+    strlcpy (name, _name, MAX_PATH + 1);
+
 
   struct dir *dir = filesys_parent_dir (name, &file_name); 
   struct inode *inode = NULL;
@@ -203,6 +208,9 @@ filesys_parent_dir (const char *path, char **file_name)
     *file_name = (char *)path;
     return start;
    }
+ 
+  if (*path == '/')
+   start = dir_open_root ();
 
   token = strtok_r ((char *)path, "/", &save_ptr);
   if ((strchr (token , '/') == NULL && 

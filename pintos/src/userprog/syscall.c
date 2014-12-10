@@ -135,7 +135,7 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_READDIR:
         get_arguments (sp, &args[0], 2);
-        f->eax = readdir ((int)args[0], (char *)args[2]);
+        f->eax = readdir ((int)args[0], (char *)args[1]);
 	break; 
   }
 }
@@ -364,7 +364,7 @@ chdir (const char *dir)
   if (abs_path == NULL)
     return false;
 
-  if (strlcpy (cur->cwd, abs_path, MAX_PATH) != strlen (abs_path))
+  if (strlcpy (cur->cwd, abs_path, MAX_PATH + 1) != strlen (abs_path))
     return false;
 
   free (abs_path);
@@ -400,11 +400,11 @@ readdir (int fd, char *name)
   if (!inode_is_directory (dir_get_inode (dir)))
     return false;
 
-  while ((success = dir_readdir (dir, name)) != false)
+  while ((success = dir_readdir (dir, name)))
    {
      if ((strcmp (".", name) == 0) ||
 	 (strcmp ("..", name) == 0))
-        continue;
+        return false;
      else
        return success;
    }
