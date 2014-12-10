@@ -48,10 +48,12 @@ filesys_done (void)
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
 bool
-filesys_create (const char *name, off_t initial_size) 
+filesys_create (const char *_name, off_t initial_size) 
 {
   block_sector_t inode_sector = 0;
   char *file_name; 
+  char *name = calloc (1, strlen (_name)+1);
+  strlcpy (name, _name, strlen (_name)+1);
   struct dir *dir = filesys_parent_dir (name, &file_name);
   bool success;
 
@@ -70,6 +72,7 @@ done:
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
+  free (name);
 
   return success;
 }
@@ -95,6 +98,7 @@ filesys_open (const char *_name)
   if (inode == NULL)
    return NULL;
 
+  free (name);
   /* Open directory/file */
   if (inode_is_directory (inode))
     return (struct file *)dir_open (inode);
@@ -113,7 +117,6 @@ filesys_remove (const char *name)
   struct dir *dir = filesys_parent_dir (name, &file_name); 
   bool success = dir != NULL && dir_remove (dir, name);
   dir_close (dir); 
-
   return success;
 }
 
