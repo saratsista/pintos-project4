@@ -107,7 +107,8 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  struct dir *dir = dir_open_root ();
+  char *file_name;
+  struct dir *dir = filesys_parent_dir (name, &file_name); 
   bool success = dir != NULL && dir_remove (dir, name);
   dir_close (dir); 
 
@@ -172,27 +173,31 @@ filesys_parent_dir (const char *path, char **file_name)
     return start;
    }
 
-  for (token = strtok_r ((char *)path, "/", &save_ptr); token != NULL;
-       token = strtok_r (NULL, "/", &save_ptr))
+  token = strtok_r ((char *)path, "/", &save_ptr);
+  while ((*file_name = strtok_r (NULL, "/", &save_ptr)) != NULL)
    {
-     if (strlen (token) > NAME_MAX + 1)
+    if (strlen (token) > NAME_MAX + 1)
        return NULL;
+
      if (dir_lookup (start, token, &inode))
       {
         next = dir_open (inode);	
+/*
 	if (strchr (save_ptr, '/') == NULL)
          {
           *file_name = save_ptr;
           return next;
          }
+*/
+       start = next;
       }
      else
       {
         return NULL;
       }
-    start = next;
-   }        
-  *file_name = save_ptr;
+   token = *file_name;
+  }        
+  *file_name = token;
   return start;
 }
 
