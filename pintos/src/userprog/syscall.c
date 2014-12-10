@@ -193,7 +193,7 @@ open (const char *file)
   if (strcmp (file, "") == 0)
     return -1;
   lock_acquire (&filesys_lock);
-  struct file *open_file = filesys_open (file); 
+  struct file *open_file = filesys_open (file);
   if (lock_held_by_current_thread (&filesys_lock))
      lock_release (&filesys_lock);
   if (open_file == NULL)
@@ -374,14 +374,12 @@ chdir (const char *dir)
 bool
 remove (const char *file)
 {
-  struct thread *t = thread_current ();
+//  struct thread *t = thread_current ();
   lock_acquire (&filesys_lock);
   char *abs_path = filesys_get_absolute_path (file);
-  if (strcmp (abs_path, t->cwd) == 0)
-   return false;
-  return filesys_remove (abs_path);
   if (lock_held_by_current_thread (&filesys_lock))
      lock_release (&filesys_lock);
+  return filesys_remove (abs_path);
 }
 
 bool

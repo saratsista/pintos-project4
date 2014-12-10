@@ -267,3 +267,22 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
     }
   return false;
 }
+
+bool
+dir_empty (struct dir *dir)
+{
+  char name[NAME_MAX + 1];
+  int count = 0;
+  
+  while (dir_readdir (dir, name))
+   {
+     if (strcmp (name, ".") != 0 ||
+         strcmp (name, "..") != 0 )
+       count ++;
+   }
+  
+  if (count > 0)
+    return false;
+  else
+    return true;
+ }

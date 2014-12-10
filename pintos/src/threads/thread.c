@@ -113,6 +113,7 @@ thread_init (void)
   memset (initial_thread->cwd, 0, MAX_PATH);
   memcpy (initial_thread->cwd, "/", 2);
   initial_thread->cwd_sector = ROOT_DIR_SECTOR;
+  initial_thread->cwd_deleted = false;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.

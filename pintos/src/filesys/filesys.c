@@ -50,6 +50,9 @@ filesys_done (void)
 bool
 filesys_create (const char *_name, off_t initial_size) 
 {
+  if (thread_current ()->cwd_deleted == true)
+    return false;
+
   block_sector_t inode_sector = 0;
   char *file_name; 
   char *name = calloc (1, strlen (_name)+1);
@@ -87,6 +90,9 @@ filesys_open (const char *_name)
 {
   char *file_name;
 
+  if (thread_current ()->cwd_deleted == true)
+    return NULL;
+
   if (strcmp (_name, "/") == 0)
     {
       return (struct file *)dir_open_root ();
@@ -121,10 +127,17 @@ bool
 filesys_remove (const char *_name) 
 {
   char *file_name;
+  struct file *file = filesys_open (_name);
+  if (inode_is_directory (file_get_inode (file)))
+    if (!dir_empty ((struct dir *)file))
+      return false;
   char *name = calloc (1, strlen (_name)+1);
   strlcpy (name, _name, strlen (_name)+1);
-  struct dir *dir = filesys_parent_dir (name, &file_name); 
+  struct dir *dir = filesys_parent_dir (name, &file_name);
+  
   bool success = dir != NULL && dir_remove (dir, file_name);
+  if (strcmp (_name, thread_current ()->cwd) == 0)
+    thread_current ()->cwd_deleted = true;
   dir_close (dir); 
   return success;
 }
@@ -188,6 +201,13 @@ filesys_parent_dir (const char *path, char **file_name)
    }
 
   token = strtok_r ((char *)path, "/", &save_ptr);
+  if ((strchr (token , '/') == NULL && 
+       (strcmp (save_ptr, "") == 0)))
+   {
+     *file_name = token;
+      return dir_open_root ();
+   }
+  
   while ((*file_name = strtok_r (NULL, "/", &save_ptr)) != NULL)
    {
     if (strlen (token) > NAME_MAX + 1)
@@ -197,11 +217,6 @@ filesys_parent_dir (const char *path, char **file_name)
       {
         next = dir_open (inode);	
 /*
-	if (strchr (save_ptr, '/') == NULL)
-         {
-          *file_name = save_ptr;
-          return next;
-         }
 */
        start = next;
       }

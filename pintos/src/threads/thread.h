@@ -114,6 +114,7 @@ struct thread
 
     char cwd[MAX_PATH];			/* Current Working Directory */
     block_sector_t cwd_sector;
+    bool cwd_deleted;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
