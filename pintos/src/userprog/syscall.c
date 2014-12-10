@@ -16,6 +16,7 @@
 #include <kernel/console.h>
 #include <filesys/filesys.h>
 #include <filesys/file.h>
+#include <filesys/inode.h>
 
 #define MAX_ARGS 3
 
@@ -255,7 +256,11 @@ write (int file_desc, const void *_buffer, unsigned size)
   {
     lock_acquire (&filesys_lock);
     file_to_write = cur->fd[file_desc];
-    if (file_to_write != NULL) {
+    if (file_to_write != NULL)
+    {
+        /* If directory, fail */
+        if (inode_is_directory (file_get_inode (file_to_write)))
+          return -1;
     	retval = file_write (file_to_write, buffer, size);
     	cur->fd[file_desc] = file_to_write;
         file_allow_write (file_to_write);
@@ -333,10 +338,16 @@ chdir (const char *dir)
    return false;
   
   struct thread *cur = thread_current ();
-  char *abs_path;
+  char *abs_path, *file_name;
+  struct inode *inode;
 
   abs_path = filesys_get_absolute_path (dir);
+  struct dir *parent = filesys_parent_dir (dir, &file_name);
+  if (!dir_lookup (parent, file_name, &inode))
+   return false;
 
+  cur->cwd_sector = inode_get_inumber (inode);
+ 
   if (abs_path == NULL)
     return false;
 

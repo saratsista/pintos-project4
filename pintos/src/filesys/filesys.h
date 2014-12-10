@@ -20,7 +20,7 @@ struct file *filesys_open (const char *name);
 bool filesys_remove (const char *name);
 
 bool dirsys_create (const char *name);
-struct dir *filesys_parent_dir (const char *name);
+struct dir *filesys_parent_dir (const char *name, char **file_name);
 char *filesys_get_absolute_path (const char *rel_path);
 
 #endif /* filesys/filesys.h */

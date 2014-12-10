@@ -51,7 +51,8 @@ bool
 filesys_create (const char *name, off_t initial_size) 
 {
   block_sector_t inode_sector = 0;
-  struct dir *dir = filesys_parent_dir (name);
+  char *file_name; 
+  struct dir *dir = filesys_parent_dir (name, &file_name);
   bool success;
 
   if (dir == NULL)
@@ -63,7 +64,7 @@ filesys_create (const char *name, off_t initial_size)
   success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size, false)
-                  && dir_add (dir, name, inode_sector));
+                  && dir_add (dir, file_name, inode_sector));
 
 done:
   if (!success && inode_sector != 0) 
@@ -81,11 +82,12 @@ done:
 struct file *
 filesys_open (const char *name)
 {
-  struct dir *dir = filesys_parent_dir (name); 
+  char *file_name;
+  struct dir *dir = filesys_parent_dir (name, &file_name); 
   struct inode *inode = NULL;
 
   if (dir != NULL)
-    dir_lookup (dir, name, &inode);
+    dir_lookup (dir, file_name, &inode);
   dir_close (dir);
 
   if (inode == NULL)
@@ -130,12 +132,12 @@ bool
 dirsys_create (const char *name)
 {
   block_sector_t inode_sector = 0;
-
-  struct dir *dir = filesys_parent_dir (name);
+  char *file_name;
+  struct dir *dir = filesys_parent_dir (name, &file_name);
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && dir_create (inode_sector, DEFAULT_DIR_SIZE, name)
-                  && dir_add (dir, name, inode_sector));
+                  && dir_add (dir, file_name, inode_sector));
 
   if (!success && inode_sector != 0) 
      free_map_release (inode_sector, 1);
@@ -148,9 +150,10 @@ dirsys_create (const char *name)
    Returns NULL if any directory in the path is invalid or
 		if any directory in path has name > NAME_MAX + 1 or
 		if any directory in the path is not a child of parent.
+   Stores the name of the leaf in the FILE_NAME.
    Accepts both absolute and relative paths.  */
 struct dir *
-filesys_parent_dir (const char *name)
+filesys_parent_dir (const char *path, char **file_name)
 {
   struct thread *cur = thread_current ();
   char *save_ptr, *token;
@@ -160,14 +163,16 @@ filesys_parent_dir (const char *name)
   /* Assign start to cwd and check if NAME has no '/'.
      If so, return start. */
   start = dir_open (inode_open (cur->cwd_sector)); 
-  if (strchr (name, '/') == NULL)
+  *file_name = NULL;
+  if (strchr (path, '/') == NULL)
    {
-    if (strlen (name) > NAME_MAX + 1)
+    if (strlen (path) > NAME_MAX + 1)
       return NULL;
+    *file_name = (char *)path;
     return start;
    }
 
-  for (token = strtok_r ((char *)name, "/", &save_ptr); token != NULL;
+  for (token = strtok_r ((char *)path, "/", &save_ptr); token != NULL;
        token = strtok_r (NULL, "/", &save_ptr))
    {
      if (strlen (token) > NAME_MAX + 1)
@@ -176,7 +181,10 @@ filesys_parent_dir (const char *name)
       {
         next = dir_open (inode);	
 	if (strchr (save_ptr, '/') == NULL)
+         {
+          *file_name = save_ptr;
           return next;
+         }
       }
      else
       {
@@ -184,6 +192,7 @@ filesys_parent_dir (const char *name)
       }
     start = next;
    }        
+  *file_name = save_ptr;
   return start;
 }
 
@@ -208,6 +217,7 @@ filesys_get_absolute_path (const char *_rel_path)
   else
    {
      strlcpy (abs_path, t->cwd, MAX_PATH);
+     strlcat (abs_path, "/", MAX_PATH);
    }
 
   token = strtok_r (rel_path, "/", &save_ptr);
