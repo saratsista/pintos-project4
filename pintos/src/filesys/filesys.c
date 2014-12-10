@@ -80,9 +80,11 @@ done:
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
 struct file *
-filesys_open (const char *name)
+filesys_open (const char *_name)
 {
   char *file_name;
+  char *name = calloc (1, strlen (_name)+1);
+  strlcpy (name, _name, strlen (_name)+1);
   struct dir *dir = filesys_parent_dir (name, &file_name); 
   struct inode *inode = NULL;
 
