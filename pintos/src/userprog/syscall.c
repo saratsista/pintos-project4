@@ -83,10 +83,7 @@ syscall_handler (struct intr_frame *f)
        get_arguments (sp, &args[0], 1);
        char *file_to_close = (char *)pagedir_get_page (cur->pagedir,
 					(const void *)args[0]);
-       lock_acquire (&filesys_lock);
-       f->eax = filesys_remove (file_to_close);
-       if (lock_held_by_current_thread (&filesys_lock))
-         lock_release (&filesys_lock);
+       f->eax = remove (file_to_close);
        break;
 
     case SYS_OPEN:
@@ -124,6 +121,22 @@ syscall_handler (struct intr_frame *f)
        get_arguments (sp, &args[0], 1);
        f->eax = chdir ((const char*)args[0]);
        break; 
+
+    case SYS_ISDIR:
+       get_arguments (sp, &args[0], 1);
+       f->eax = isdir ((int)args[0]);
+       break;
+
+    case SYS_INUMBER:
+       get_arguments (sp, &args[0], 1);
+       f->eax = inode_get_inumber (file_get_inode 
+				  (thread_current ()->fd[(int)args[0]]));
+       break;
+
+    case SYS_READDIR:
+        get_arguments (sp, &args[0], 2);
+        f->eax = readdir ((int)args[0], (char *)args[2]);
+	break; 
   }
 }
 
@@ -356,4 +369,46 @@ chdir (const char *dir)
 
   free (abs_path);
   return true;  
+}
+
+bool
+remove (const char *file)
+{
+  struct thread *t = thread_current ();
+  lock_acquire (&filesys_lock);
+  char *abs_path = filesys_get_absolute_path (file);
+  if (strcmp (abs_path, t->cwd) == 0)
+   return false;
+  return filesys_remove (abs_path);
+  if (lock_held_by_current_thread (&filesys_lock))
+     lock_release (&filesys_lock);
+}
+
+bool
+isdir (int fd)
+{
+  struct thread *t = thread_current ();
+  struct inode *inode = file_get_inode (t->fd[fd]);
+  return inode_is_directory (inode);
+}
+
+bool
+readdir (int fd, char *name)
+{
+  struct thread *t = thread_current ();
+  struct dir *dir = (struct dir *)t->fd[fd];
+  bool success;
+  
+  if (!inode_is_directory (dir_get_inode (dir)))
+    return false;
+
+  while ((success = dir_readdir (dir, name)) != false)
+   {
+     if ((strcmp (".", name) == 0) ||
+	 (strcmp ("..", name) == 0))
+        continue;
+     else
+       return success;
+   }
+  return success;
 }

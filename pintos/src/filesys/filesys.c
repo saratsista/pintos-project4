@@ -86,8 +86,15 @@ struct file *
 filesys_open (const char *_name)
 {
   char *file_name;
+
+  if (strcmp (_name, "/") == 0)
+    {
+      return (struct file *)dir_open_root ();
+    }
+
   char *name = calloc (1, strlen (_name)+1);
   strlcpy (name, _name, strlen (_name)+1);
+
   struct dir *dir = filesys_parent_dir (name, &file_name); 
   struct inode *inode = NULL;
 
@@ -111,11 +118,13 @@ filesys_open (const char *_name)
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
 bool
-filesys_remove (const char *name) 
+filesys_remove (const char *_name) 
 {
   char *file_name;
+  char *name = calloc (1, strlen (_name)+1);
+  strlcpy (name, _name, strlen (_name)+1);
   struct dir *dir = filesys_parent_dir (name, &file_name); 
-  bool success = dir != NULL && dir_remove (dir, name);
+  bool success = dir != NULL && dir_remove (dir, file_name);
   dir_close (dir); 
   return success;
 }
@@ -220,6 +229,9 @@ filesys_get_absolute_path (const char *_rel_path)
   struct thread *t = thread_current ();
   char *save_ptr, *token;
   
+  if (strcmp (rel_path, "/") == 0)
+    return rel_path;
+
   if (*rel_path == '/')
    {
     strlcpy (abs_path, "/", MAX_PATH);
@@ -227,11 +239,10 @@ filesys_get_absolute_path (const char *_rel_path)
   else
    {
      strlcpy (abs_path, t->cwd, MAX_PATH);
-     strlcat (abs_path, "/", MAX_PATH);
    }
 
   token = strtok_r (rel_path, "/", &save_ptr);
-  do
+  while (token != NULL) 
    {
      if (strcmp (token, "..") == 0)
       {
@@ -241,8 +252,11 @@ filesys_get_absolute_path (const char *_rel_path)
        {
          strlcat (abs_path, token, MAX_PATH);
        }
-      token = strtok_r (NULL, "/'", &save_ptr);
-    } while (token != NULL);
+      if (strcmp (abs_path, "") == 0)
+         strlcat (abs_path, "/", MAX_PATH);
+  
+      token = strtok_r (NULL, "/", &save_ptr);
+    } 
    
      return abs_path;
 }
