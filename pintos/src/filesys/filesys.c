@@ -128,16 +128,20 @@ filesys_remove (const char *_name)
 {
   char *file_name;
   struct file *file = filesys_open (_name);
-  if (inode_is_directory (file_get_inode (file)))
+
+  if (file != NULL && 
+      inode_is_directory (file_get_inode (file)))
     if (!dir_empty ((struct dir *)file))
       return false;
+
   char *name = calloc (1, strlen (_name)+1);
   strlcpy (name, _name, strlen (_name)+1);
   struct dir *dir = filesys_parent_dir (name, &file_name);
-  
   bool success = dir != NULL && dir_remove (dir, file_name);
+
   if (strcmp (_name, thread_current ()->cwd) == 0)
     thread_current ()->cwd_deleted = true;
+
   dir_close (dir); 
   return success;
 }
@@ -215,9 +219,7 @@ filesys_parent_dir (const char *path, char **file_name)
 
      if (dir_lookup (start, token, &inode))
       {
-        next = dir_open (inode);	
-/*
-*/
+       next = dir_open (inode);	
        start = next;
       }
      else
@@ -266,6 +268,7 @@ filesys_get_absolute_path (const char *_rel_path)
      else if(*token != '.')
        {
          strlcat (abs_path, token, MAX_PATH);
+         strlcat (abs_path, "/", MAX_PATH);
        }
       if (strcmp (abs_path, "") == 0)
          strlcat (abs_path, "/", MAX_PATH);
