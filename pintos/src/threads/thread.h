@@ -168,4 +168,6 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+void set_cwd_deleted (block_sector_t);
+
 #endif /* threads/thread.h */

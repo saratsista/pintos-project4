@@ -216,7 +216,6 @@ inode_allocate_indirect (struct indirect *indirect, int sectors_left)
         free (buffer);
 	return -1;
        }
-      //printf (">>> sector allocated: %d\n",*(buffer+indirect->offset)); 
       block_write (fs_device, *(buffer + indirect->offset), zeros);
       sectors_left--;
       indirect->offset++;
@@ -245,7 +244,6 @@ inode_allocate_double_indirect (struct d_indirect *d_indirect,
        sectors_left = -1;
        goto done;
      }
-     //printf (">>> %s: indirect sector allocated: %d\n", __func__,*(buffer+j)); 
     }
      indirect.sector = *(buffer + j);
      indirect.offset = d_indirect->off2;
@@ -433,8 +431,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       /* Disk sector to read, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
-      //printf ("sector to read: %d\n", sector_idx);
-      //printf ("offset to read: %d\n", offset);
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
       off_t inode_left = inode_length (inode) - offset;
@@ -473,7 +469,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
   if (inode->deny_write_cnt)
     return 0;
-  //printf ("length of file before growth: %d\n", inode->length);
 
   /* If offset is greater than current length of the file
      grow the file */
@@ -493,9 +488,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       /* Sector to write, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
-      //printf ("sector to write: %d\n", sector_idx);
-      //printf ("offset to write: %d\n", offset);
-      //printf ("length of file: %d\n", inode->length);
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
       off_t inode_left = inode_length (inode) - offset;
@@ -564,9 +556,6 @@ grow_file (struct inode *inode, off_t offset)
   block_read (fs_device, inode->sector, disk_inode);
   if (new_sectors == 0)
     goto done;
-  //printf ("%s: new sectors = %d\n", __func__, new_sectors);
-  //printf (">>> disk_inode->pointer = %d\n", disk_inode->pointer);
-  //printf (">>> %s: offset = %d\n", __func__, offset);
   switch (disk_inode->pointer) 
    {
      case NONE:
@@ -576,7 +565,6 @@ grow_file (struct inode *inode, off_t offset)
 	    goto done;
           }
           block_write (fs_device, disk_inode->direct, zeros);
-	  //printf (">>> Direct sector allocated: %d\n", disk_inode->direct);
           new_sectors--;
           disk_inode->pointer = DIRECT;
           if (new_sectors == 0)
@@ -589,9 +577,7 @@ grow_file (struct inode *inode, off_t offset)
 	      success = false;
 	      goto done;   
 	    }
-	    //printf (">>> indirect sector allocated: %d\n", disk_inode->indirect.sector);
             new_sectors = inode_allocate_indirect (&disk_inode->indirect, new_sectors);
-            //printf ("Indirect pointer offset: %d\n", disk_inode->indirect.offset);
             if (new_sectors == -1)
              {
 	 	 success = false;
@@ -607,7 +593,6 @@ grow_file (struct inode *inode, off_t offset)
           if (disk_inode->indirect.offset < MAX_SECTOR_INDEX)
 	   {
 	     new_sectors = inode_allocate_indirect (&disk_inode->indirect, new_sectors);
-            //printf ("%% Indirect pointer offset: %d\n", disk_inode->indirect.offset);
             if (new_sectors == -1)
              {
 	 	 success = false;
@@ -621,7 +606,6 @@ grow_file (struct inode *inode, off_t offset)
 		 success = false;
 		 goto done;
 	      }
-	      //printf (">>> double indirect sector allocated: %d\n", disk_inode->d_indirect.sector);
 	      disk_inode->pointer = DOUBLE_INDIRECT;
            }
       	   if (new_sectors == 0)

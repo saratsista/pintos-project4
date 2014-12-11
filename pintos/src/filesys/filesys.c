@@ -134,6 +134,8 @@ filesys_remove (const char *_name)
   char *file_name;
   struct file *file = filesys_open (_name);
 
+  set_cwd_deleted (inode_get_inumber (file_get_inode (file)));
+
   if (file != NULL && 
       inode_is_directory (file_get_inode (file)))
     if (!dir_empty ((struct dir *)file))

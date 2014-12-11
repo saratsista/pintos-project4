@@ -129,8 +129,7 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_INUMBER:
        get_arguments (sp, &args[0], 1);
-       f->eax = inode_get_inumber (file_get_inode 
-				  (thread_current ()->fd[(int)args[0]]));
+       f->eax = inumber ((int)args[0]);
        break;
 
     case SYS_READDIR:
@@ -374,7 +373,8 @@ chdir (const char *dir)
 bool
 remove (const char *file)
 {
-//  struct thread *t = thread_current ();
+  if (strcmp (file, "/") == 0)
+    return false;
   lock_acquire (&filesys_lock);
   char *abs_path = filesys_get_absolute_path (file);
   if (lock_held_by_current_thread (&filesys_lock))
@@ -386,6 +386,8 @@ bool
 isdir (int fd)
 {
   struct thread *t = thread_current ();
+  if (t->fd[fd] == NULL)
+   return false;
   struct inode *inode = file_get_inode (t->fd[fd]);
   return inode_is_directory (inode);
 }
@@ -409,4 +411,12 @@ readdir (int fd, char *name)
        return success;
    }
   return success;
+}
+
+int
+inumber (int fd)
+{
+  struct thread *t = thread_current ();
+  struct inode *inode = file_get_inode (t->fd[fd]);
+  return inode_get_inumber (inode);
 }

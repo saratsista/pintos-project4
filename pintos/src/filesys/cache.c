@@ -68,6 +68,9 @@ write_behind_daemon (void *aux UNUSED)
 void
 cache_write (block_sector_t sector, void *buffer, int valid_bytes)
 {
+  if (lock_try_acquire (&cache_lock))
+      lock_release (&cache_lock);
+
   struct cache_entry *entry = find_cache_entry (sector, false); 
   if (!entry)
    {
@@ -91,6 +94,9 @@ cache_write (block_sector_t sector, void *buffer, int valid_bytes)
 struct cache_entry *
 cache_read (block_sector_t sector, int read_bytes)
 {
+  if (lock_try_acquire (&cache_lock))
+      lock_release (&cache_lock);
+
   int zero_bytes;
   struct cache_entry *entry = find_cache_entry (sector, false);
   if (!entry)
@@ -182,15 +188,15 @@ evict_cache_entry ()
           e = list_prev (e))
       { 
         entry = list_entry (e, struct cache_entry, elem);
-        if (entry->open_count == 0)
-         {
+         if (entry->open_count == 0)
+          {
            found = true;
            break;
-         }
-      }
+          }
+       }
      if (found)
        break;
-  }   
+    }   
 
   if (entry->dirty)
    {

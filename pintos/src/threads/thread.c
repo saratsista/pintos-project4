@@ -709,4 +709,17 @@ ready_list_less_func (const struct list_elem *a, const struct list_elem *b,
   return false;
 } 
 
+void
+set_cwd_deleted (block_sector_t sector)
+{
+  struct thread *t;
+  struct list_elem *e;
 
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+   {
+    t = list_entry (e, struct thread, allelem);
+    if (t->cwd_sector == sector) 
+      t->cwd_deleted = true; 
+   }
+}
