@@ -20,8 +20,6 @@
 
 #define MAX_ARGS 3
 
-struct lock filesys_lock;
-
 static void syscall_handler (struct intr_frame *);
 void validate_pointer (void *ptr);
 void get_arguments (int *esp, int *args, int count);
@@ -36,7 +34,6 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   int args[MAX_ARGS];
-  lock_init (&filesys_lock);
   validate_pointer (f->esp);
   int *sp = (int *)f->esp;
   struct thread *cur = thread_current ();
@@ -176,9 +173,7 @@ create (const char *file_name, unsigned size)
   int return_value;
   if (file_name == NULL)
     exit (-1);    
-  lock_acquire (&filesys_lock);
   return_value = filesys_create (file_name, size);
-  lock_release (&filesys_lock);
   return return_value;
 }
 
@@ -191,13 +186,11 @@ open (const char *file)
     exit (-1);
   if (strcmp (file, "") == 0)
     return -1;
-  lock_acquire (&filesys_lock);
   struct file *open_file = filesys_open (file);
-  if (lock_held_by_current_thread (&filesys_lock))
-     lock_release (&filesys_lock);
   if (open_file == NULL)
     return -1;
-  if (file_get_inode (open_file) == file_get_inode(cur->md->exec_file))
+  if ((cur->md->exec_file != NULL) &&
+      file_get_inode (open_file) == file_get_inode(cur->md->exec_file))
       file_deny_write (open_file);
   struct file **fd_array = cur->fd;
   int k;
@@ -233,17 +226,15 @@ read (int fd, void *_buffer, unsigned size)
     }
   }
   else {
-    lock_acquire (&filesys_lock);
     struct file *file = cur->fd[fd];
     if (file != NULL) {
-      if (file_get_inode (file) == file_get_inode(cur->md->exec_file))
+      if ((cur->md->exec_file != NULL &&
+	   file_get_inode (file) == file_get_inode(cur->md->exec_file))
         file_deny_write (file);
       retval = file_read (file, buffer, size);
       cur->fd[fd] = file;
     }
     else retval = -1;
-    if (lock_held_by_current_thread (&filesys_lock))
-      lock_release (&filesys_lock);
   }
   return retval;
 }
@@ -266,7 +257,6 @@ write (int file_desc, const void *_buffer, unsigned size)
   }
   else
   {
-    lock_acquire (&filesys_lock);
     file_to_write = cur->fd[file_desc];
     if (file_to_write != NULL)
     {
@@ -278,8 +268,6 @@ write (int file_desc, const void *_buffer, unsigned size)
         file_allow_write (file_to_write);
     }
     else retval = -1;
-    if (lock_held_by_current_thread (&filesys_lock))
-      lock_release (&filesys_lock);
   }
   return retval;
 }
@@ -288,11 +276,8 @@ void
 close (int fd)
 {
   struct thread *cur = thread_current ();
-  lock_acquire (&filesys_lock);
   file_close (cur->fd[fd]);
   cur->fd[fd] = NULL;
-  if (lock_held_by_current_thread (&filesys_lock))
-    lock_release (&filesys_lock);
 }
 
 int
@@ -375,10 +360,7 @@ remove (const char *file)
 {
   if (strcmp (file, "/") == 0)
     return false;
-  lock_acquire (&filesys_lock);
   char *abs_path = filesys_get_absolute_path (file);
-  if (lock_held_by_current_thread (&filesys_lock))
-     lock_release (&filesys_lock);
   return filesys_remove (abs_path);
 }
 

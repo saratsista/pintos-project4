@@ -168,6 +168,24 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  struct list_elem *e;
+  struct list *clist = &cur->child_meta_list;
+  struct child_metadata *meta;
+
+
+  if (!list_empty (clist))
+   {
+     e = list_begin (clist);
+     while (!list_empty (clist))
+      {
+        meta = list_entry (e, struct child_metadata, infoelem); 
+        e = list_remove (e);
+        free (meta);
+      }
+   }
+      
+   if (strcmp (cur->cwd, "/") != 0  && cur->cwd_deleted == false)
+     dir_close ((struct dir *)file_get_inode (filesys_open (cur->cwd)));
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

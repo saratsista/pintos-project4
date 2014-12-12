@@ -6,12 +6,14 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 
 /* A directory. */
 struct dir 
   {
     struct inode *inode;                /* Backing store. */
     off_t pos;                          /* Current position. */
+    struct lock dir_lock;
   };
 
 /* A single directory entry. */
@@ -36,6 +38,7 @@ dir_create (block_sector_t sector, size_t entry_cnt, const char *name)
    if (inode == NULL)
      return false;
    struct dir *new_dir = dir_open (inode);
+   lock_acquire (&new_dir->dir_lock);
    struct dir_entry *dots = calloc (1, sizeof (struct dir_entry));
 
    dots->inode_sector = inode_get_inumber(inode);
@@ -43,7 +46,11 @@ dir_create (block_sector_t sector, size_t entry_cnt, const char *name)
    dots->in_use = true;
    if ((inode_write_at (inode, dots, sizeof dots, off) != sizeof dots)
 	&& (!dir_add (new_dir, name, dots->inode_sector)))
+      {
+        if (lock_held_by_current_thread (&new_dir->dir_lock))
+          lock_release (&new_dir->dir_lock);
         return false;
+      }
     off += sizeof dots;
    
    memset (dots->name, 0, NAME_MAX+1);
@@ -55,10 +62,15 @@ dir_create (block_sector_t sector, size_t entry_cnt, const char *name)
 
    if ((inode_write_at (inode, dots, sizeof dots, off) != sizeof dots)
 	&& (!dir_add (new_dir, name, dots->inode_sector)))
+       {
+        if (lock_held_by_current_thread (&new_dir->dir_lock))
+          lock_release (&new_dir->dir_lock);
         return false;
-  
+       }
    dir_close (new_dir);
    free (dots);
+   if (lock_held_by_current_thread (&new_dir->dir_lock))
+     lock_release (&new_dir->dir_lock);
    return true;
 }
 
@@ -68,6 +80,7 @@ struct dir *
 dir_open (struct inode *inode) 
 {
   struct dir *dir = calloc (1, sizeof *dir);
+  lock_init (&dir->dir_lock);
   if (inode != NULL && dir != NULL)
     {
       dir->inode = inode;
@@ -292,3 +305,9 @@ dir_empty (struct dir *dir)
   else
     return true;
  }
+
+struct lock *
+dir_lock (struct dir *dir)
+{
+  return &dir->dir_lock;
+}

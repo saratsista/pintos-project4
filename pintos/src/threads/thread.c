@@ -114,6 +114,7 @@ thread_init (void)
   memcpy (initial_thread->cwd, "/", 2);
   initial_thread->cwd_sector = ROOT_DIR_SECTOR;
   initial_thread->cwd_deleted = false;
+  list_init (&initial_thread->child_meta_list);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.

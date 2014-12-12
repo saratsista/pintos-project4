@@ -7,10 +7,12 @@
 #include "filesys/free-map.h"
 #include "filesys/cache.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 #define MAX_SECTOR_INDEX 128
+#define NO_SECTOR UINT_MAX
 
 static char zeros[BLOCK_SECTOR_SIZE];
 static block_sector_t next_di;
@@ -53,6 +55,13 @@ struct inode
     struct lock growth_lock;
   };
 
+struct read_ahead_struct {
+     struct inode *inode;
+     off_t offset;
+};
+
+thread_func inode_read_ahead;
+
 /* Given a sector SECTOR and and index INDEX into the SECTOR,
    it returns the sector number stored at that INDEX.
    Used for calculating sector numbers in indirect and double indirect
@@ -77,7 +86,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
   ASSERT (inode != NULL);
 
   if (pos > inode->length)
-    return -1;
+    return NO_SECTOR;
   
   off_t sector_index = pos / BLOCK_SECTOR_SIZE;
   
@@ -425,11 +434,14 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
   struct cache_entry *entry = NULL;
-
+  struct read_ahead_struct *r = malloc (sizeof (struct read_ahead_struct));
+   
   while (size > 0) 
     {
       /* Disk sector to read, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
+      if (sector_idx == NO_SECTOR)
+        return bytes_read;
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -444,7 +456,9 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       entry = cache_read (sector_idx, BLOCK_SECTOR_SIZE);
       memcpy (buffer + bytes_read, entry->data + sector_ofs, chunk_size);
-  
+      r->inode = inode;
+      r->offset = offset + BLOCK_SECTOR_SIZE;
+      
       /* Advance. */
       size -= chunk_size;
       offset += chunk_size;
@@ -636,5 +650,21 @@ done:
      
    free (disk_inode);
    return success;
+}
+
+void
+inode_read_ahead (void *aux)
+{
+  struct read_ahead_struct *r = (struct read_ahead_struct *)aux;
+  if (r->inode == NULL)
+    return;
+ 
+  block_sector_t sector = byte_to_sector (r->inode, r->offset);
+  if (sector == NO_SECTOR)
+    return;
+
+  cache_read (sector, BLOCK_SECTOR_SIZE);
+  
+  thread_exit ();
 }
 	   

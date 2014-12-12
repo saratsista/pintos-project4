@@ -5,6 +5,7 @@
 #include <limits.h>
 #include "devices/block.h"
 #include "threads/synch.h"
+#include "filesys/off_t.h"
 
 #define BUFFER_CACHE_SIZE 64
 #define EMPTY UINT_MAX 

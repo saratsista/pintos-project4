@@ -53,15 +53,21 @@ filesys_create (const char *_name, off_t initial_size)
   if (thread_current ()->cwd_deleted == true)
     return false;
 
+  if (strlen (_name) > NAME_MAX)
+    return false;
+
   block_sector_t inode_sector = 0;
   char *file_name; 
   char *name = calloc (1, strlen (_name)+1);
   strlcpy (name, _name, strlen (_name)+1);
   struct dir *dir = filesys_parent_dir (name, &file_name);
+  lock_acquire (dir_lock(dir));
   bool success;
 
   if (dir == NULL)
    {
+  if (lock_held_by_current_thread (dir_lock(dir)))
+    lock_release (dir_lock(dir));
      success = false;
      goto done;
    }
@@ -72,6 +78,8 @@ filesys_create (const char *_name, off_t initial_size)
                   && dir_add (dir, file_name, inode_sector));
 
 done:
+  if (lock_held_by_current_thread (dir_lock(dir)))
+    lock_release (dir_lock(dir));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
@@ -117,10 +125,10 @@ filesys_open (const char *_name)
    return NULL;
 
   free (name);
-  /* Open directory/file */
+  /* Open directory/file 
   if (inode_is_directory (inode))
     return (struct file *)dir_open (inode);
-  else
+  else */
     return file_open (inode);
 }
 
@@ -133,6 +141,9 @@ filesys_remove (const char *_name)
 {
   char *file_name;
   struct file *file = filesys_open (_name);
+
+  if (file == NULL)
+    return false;
 
   set_cwd_deleted (inode_get_inumber (file_get_inode (file)));
 
@@ -173,6 +184,7 @@ dirsys_create (const char *name)
   block_sector_t inode_sector = 0;
   char *file_name;
   struct dir *dir = filesys_parent_dir (name, &file_name);
+  lock_acquire (dir_lock(dir));
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && dir_create (inode_sector, DEFAULT_DIR_SIZE, name)
@@ -181,6 +193,8 @@ dirsys_create (const char *name)
   if (!success && inode_sector != 0) 
      free_map_release (inode_sector, 1);
    
+  if (lock_held_by_current_thread (dir_lock(dir)))
+    lock_release (dir_lock(dir));
   dir_close (dir);
   return success;
 }
