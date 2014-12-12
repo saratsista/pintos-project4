@@ -229,7 +229,7 @@ read (int fd, void *_buffer, unsigned size)
     struct file *file = cur->fd[fd];
     if (file != NULL) {
       if ((cur->md->exec_file != NULL &&
-	   file_get_inode (file) == file_get_inode(cur->md->exec_file))
+	   file_get_inode (file) == file_get_inode(cur->md->exec_file)))
         file_deny_write (file);
       retval = file_read (file, buffer, size);
       cur->fd[fd] = file;
