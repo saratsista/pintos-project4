@@ -130,11 +130,9 @@ allocate_cache_entry ()
 
      entry = calloc (1, sizeof (struct cache_entry));
      entry->sector = EMPTY;
-     entry->accessed = false;
      entry->dirty = false;
      entry->valid_bytes = EMPTY;
      lock_init (&entry->update_lock);
-     entry->is_growing = false;
      return entry;
 }
 

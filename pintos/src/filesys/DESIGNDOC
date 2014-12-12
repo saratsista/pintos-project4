@@ -1,16 +1,16 @@
-       	       	     +-------------------------+
-		     |		CS 140	       |
-		     | PROJECT 4: FILE SYSTEMS |
-		     |	   DESIGN DOCUMENT     |
-		     +-------------------------+
+
+S 140         |
+                     | PROJECT 4: FILE SYSTEMS |
+                     |     DESIGN DOCUMENT     |
+                     +-------------------------+
 
 ---- GROUP ----
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Kishore Sridhar <kish@ccs.neu.edu>
+Sarat Chandra Sista <ssaratc@ccs.neu.edu>
+Nirupa Narayanappa <nirupa13@ccs.neu.edu>
 
 ---- PRELIMINARIES ----
 
@@ -21,8 +21,8 @@ FirstName LastName <email@domain.example>
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
 
-		     INDEXED AND EXTENSIBLE FILES
-		     ============================
+                     INDEXED AND EXTENSIBLE FILES
+                     ============================
 
 ---- DATA STRUCTURES ----
 
@@ -30,13 +30,99 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+/* Enum for different types of pointers in inode_disk */
+enum pointer
+ {
+   NONE,
+   DIRECT,              /* Direct pointer to sector on-disk */
+   INDIRECT,            /* Indirect pointer to sectors */
+   DOUBLE_INDIRECT      /* Double Indirect pointer to sectors */
+ };
+
+/* An Indirect Pointer */
+struct indirect
+ {
+   block_sector_t sector;  /* Sector where indirect pointer is present */
+   off_t offset;           /* offset into SECTOR */
+ };
+
+/* A Double-indirect Pointer */
+struct d_indirect
+ {
+   block_sector_t sector;  /* Sector where double-indirect inode is stored.*/
+   off_t off1;            /* Offset into SECTOR */
+   off_t off2;            /* Offset into sector found at off1 */
+ };
+
+
+In struct inode_disk:
+
+    block_sector_t direct;               /* First data sector. */
+    struct indirect indirect;            /* Indirect pointer*/
+    struct d_indirect d_indirect;       /* Double-indirect pointer*/
+    enum pointer pointer;               /* Tells the current pointer in use */
+    bool is_directory;                  /* Is this file a directory? */
+
+In struct inode:
+
+    block_sector_t direct;               /* First data sector. */
+    struct indirect indirect;            /* Indirect pointer*/
+    struct d_indirect d_indirect;       /* Double-indirect pointer*/
+    bool is_directory;                  /* Is this file a directory? */
+    struct lock growth_lock;            /* Lock acquired before growing a file */
+
+
 >> A2: What is the maximum size of a file supported by your inode
 >> structure?  Show your work.
+
+The maximum size of a file supported is 8.06 MB (8454656 bytes).
+It is greater than 8 MB (8388608 bytes), which was the mandate.
+
+Our inode contains one direct block, one indirect block and one
+double-indirect block. A sector on the disk is 512 bytes long
+and hence each sector can hold either 512 bytes of data or 512/4 = 128
+sector addresses (since block_sector_t is 4 bytes long).
+
+The capacity of each block is calculated as follows:
+direct_block = 512 (0.5 KB)
+indirect_block = 128*512 = 65536 (64 KB)
+double_indirect_block = 128*128*512 = 8388608 (8 MB)
+
+total_capacity = direct_block + indirect_block + double_indirect_block
+               = 8454656 bytes = 8.06 MB
 
 ---- SYNCHRONIZATION ----
 
 >> A3: Explain how your code avoids a race if two processes attempt to
 >> extend a file at the same time.
+
+Each inode contains a growth_lock, which must be obtained before a process
+calls grow_file. When a process grows a file, it obtains this lock, grows the
+file and releases the lock. Hence, while the file is being grown, no other process
+may attempt to grow it although they are allowed to read the file and write to
+the file.
+Once the file has been grown and the growth lock has been released, other processes
+which contested for it earlier can now acquire the growth_lock. In the grow_file
+function, we check the unused space in the last data sector. Depending on the available 
+unused space, the next process decides whether or not to grow the file further.
+
+Example:
+File X is 510 bytes long. Process A wants to grow X by 5 bytes and process B wants to
+grow X by 600 bytes.
+
+Scenario 1:
+A obtains the growth_lock first, allocates a new sector for the file, and completes its
+write and releases the growth_lock. X now has a file_length of 515 bytes. Process B now
+obtains the lock and finds that a new sector has been allocated out of which 509 bytes are
+unused. Since it needs to write 600 bytes, it grows the file again by allocating a new sector
+and writes to it before releasing the lock.
+
+Scenario 2:
+B obtains the growth_lock first and grows the file by two sectors to accomodate its write of
+600 bytes, completes the write and releases the growth_lock. The file_length is now 1100 bytes
+ with 26 bytes unused in the last data sector. Process A now obtains the lock and finds 26 bytes 
+of unused space available in the current sector. Process A decides that no growth is necessary
+and completes its write by using up 5 bytes from the available 26 in the same sector.
 
 >> A4: Suppose processes A and B both have file F open, both
 >> positioned at end-of-file.  If A reads and B writes F at the same
@@ -45,12 +131,36 @@ FirstName LastName <email@domain.example>
 >> nonzero data, A is not allowed to see all zeros.  Explain how your
 >> code avoids this race.
 
+When B writes to F, the file_length is updated only after B completes the write. 
+When A attempts to read at EOF before B completes the write, it first checks 
+the file_length. Since A will see the unupdated file_length, it will decide 
+that there are 0 bytes that can be read beyond its current position and the 
+read exits. Since data added by a write can not be read before the write 
+completes, A will not see zeroes when B writes non-zero bytes. 
+
+
 >> A5: Explain how your synchronization design provides "fairness".
 >> File access is "fair" if readers cannot indefinitely block writers
 >> or vice versa.  That is, many processes reading from a file cannot
 >> prevent forever another process from writing the file, and many
 >> processes writing to a file cannot prevent another process forever
 >> from reading the file.
+
+There can be any number of readers and writers at the same time. Hence there is no
+indefinite blocking of readers or writers.
+
+Writing can happen simultaneously, and the latest write to a location remains on the file.
+
+How simultaneous reads and writes at some location are handled:
+
+When write is not being performed at EOF:-
+When a process A tries to read the data being written to a file by another process B,
+ if B has completed writing the sector at which A is currently reading, then A will see 
+the new data, else it will see the old data.
+
+When write is performed at EOF:-
+Until the write completes, writes at EOF will not be visible before they complete. Once
+the write completes, the file_length will get updated and readers can then see the new data.
 
 ---- RATIONALE ----
 
@@ -60,8 +170,15 @@ FirstName LastName <email@domain.example>
 >> structure, and what advantages and disadvantages does your
 >> structure have, compared to a multilevel index?
 
-			    SUBDIRECTORIES
-			    ==============
+The inode implementation has multilivel index. It has one direct, one indirect and
+one double-indirect pointer. We chose this combination in order to optimize for small
+files. Although implementing just the double-indirect would have given the inode the required
+capacity, having a direct and indirect makes usage of small files (ranging from a few bytes
+to few KBs in size) faster. For small files, this implementation avoids going through two layers
+of indirection and the book-keeping overhead.
+
+                            SUBDIRECTORIES
+                            ==============
 
 ---- DATA STRUCTURES ----
 
@@ -69,10 +186,50 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+In struct dir:
+
+struct lock dir_lock;               /* Added for synchronizing creation
+                                        and deletion of directory entries.*/
+
+In struct thread:
+
+char cwd[MAX_PATH];                /* Current working directory of the thread.*/
+
+where MAX_PATH is set to 256.
+
+block_sector_t cwd_sector;          /* sector number of the cwd */ 
+
 ---- ALGORITHMS ----
 
 >> B2: Describe your code for traversing a user-specified path.  How
 >> do traversals of absolute and relative paths differ?
+
+The user specified path is passed to the function filesys_get_absolute_path()
+regardless of whether the supplied path was an absolute path or relative path
+since this is handled inside the afforementioned function.
+
+Finding absolute path:-
+filesys_get_absolute_path() is a function that constructs the absolute path
+from the given path. If the given path is relative, then we store the current working 
+directory of the process (stored in struct thread) in a variable called abs_path, else if it 
+is absolute, we store root('/') in abs_path. 
+
+We now tokenize the given path using '/' as the 
+delimiter and get the directory names in order using strtok_r(). The tokens can
+be one of three possibilities: '.', '..', other strings. If the token is '.', we 
+do nothing. If the token is '..', then we remove the last item in the path stored in
+abs_path is removed, if abs_path is root, then it remains as it is. If the token is
+a string other than '.' and '..', it is appended to abs_path with a '/' before it.
+Now we have the absolute path with which we can traverse the directory tree.
+
+Traversing the path:-
+We use the function filesys_parent_dir to get a pointer to the directory structure of the 
+penultimate string in the path. This is because, in a path the last string is the target (directory
+or file) we are interested in while the penultimate string is the parent of the target.
+We initially open the root directory. We now tokenize the absolute path with '/' as the delimiter 
+and get the first token. We then check for a directory entry whose name matches the token obtained.
+If it is present, we open that directory, else the function returns NULL. This process continues until
+the penultimate entry and then returns the pointer to that directory.
 
 ---- SYNCHRONIZATION ----
 
@@ -81,18 +238,44 @@ FirstName LastName <email@domain.example>
 >> should succeed, as should only one of two simultaneous attempts to
 >> create a file with the same name, and so on.
 
+The previously implemented filesys_lock is not used anymore and instead we
+have seperate locks for each directory.
+Each directory has a lock called dir_lock. This lock must be obtained before
+entries are added or removed in a given directory and is
+released before the system calls complete. This ensures that any action that
+adds or removes entries in a directory is synchronized. This effectively
+prevents simultaneous removes of a given entry and also attempts to
+simultaneously create two entries with the same name. 
+
 >> B5: Does your implementation allow a directory to be removed if it
 >> is open by a process or if it is in use as a process's current
 >> working directory?  If so, what happens to that process's future
 >> file system operations?  If not, how do you prevent it?
+
+We do not allow the removal of a directory that is being used by some
+process or if it is the current working directory of some process. 
+
+We check if the open_cnt value of the given directory is greater than 0. 
+This implies that it has been opened by some process. We also traverse all the
+thread structures to check if at least one of them have the given directory as
+the current working directory. If either of the conditions is true, then the 
+calls to delete the given directory fails.
 
 ---- RATIONALE ----
 
 >> B6: Explain why you chose to represent the current directory of a
 >> process the way you did.
 
-			     BUFFER CACHE
-			     ============
+We store the current directory of a process in its structure, ie it is an
+entry in struct thread. We chose to do this because each process can have its
+own cwd and this information needs to be accessed while performing operations such as
+rmdir and exec. In our implementation, rmdir does not delete a directory if it is the
+cwd of some process. While executing exec, the child process inherits the parent's cwd 
+on creation. The cwd needs to be accessed also when relative paths are given for traversal.
+Storing this information in the struct thread gives us easy O(1) access to it.
+
+                             BUFFER CACHE
+                             ============
 
 ---- DATA STRUCTURES ----
 
@@ -100,14 +283,62 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+/* Buffer Cache: List of 64 cache entries */
+static struct list buffer_cache;
+
+/* Lock acquired while evicting an entry */
+struct lock cache_lock;
+
+/* Each cache entry in the buffer_cache */
+struct cache_entry
+{
+  char data[BLOCK_SECTOR_SIZE]; /* Data block in each cache_entry */
+  block_sector_t sector;         /* On-disk sector number for the entry */
+  bool dirty;                    /* Dirty bit for cache_entry */
+  int open_count;                /* Number of threads currently accessing 
+                                    the entry */
+  int  valid_bytes;              /* Number of valid bytes in this sector*/
+  struct lock update_lock;       /* Used to synchronize modifications to the open_count
+                                    field.*/
+  struct list_elem elem;
+};
+
+In enum thread_status:
+
+   THREAD_SLEEPING                     /* Thread in sleeping state, for write-behind */
+   int64_t wake_time;                  /* Wake up time for the thread */
+
+/* List of processes in THREAD_SLEEPING state, for write behind */
+static struct list sleep_list;
+
 ---- ALGORITHMS ----
 
 >> C2: Describe how your cache replacement algorithm chooses a cache
 >> block to evict.
 
+The cache replacement algorithm uses Least Recently Used (LRU) to perform
+eviction. 
+
+The cache entries are stored in a list. Each time a cache entry is accessed, it
+is pushed to the front of the list. This implies that the least recently used entry
+will reside at the end of the list. 
+
+When an entry needs to be evicted, we go to the last element and check if it is
+currently being used by some process. Each cache entry has an open_count field that
+tells how many processes are currently using it. If open_count is 0, we evict it. Else
+we go to the second last entry and repeat this process until we have evicted an entry.
+
 >> C3: Describe your implementation of write-behind.
 
+Write-behind is implemented using a daemon thread that executes periodically to write
+all the cache entries whose dirty fields are true. It sets their dirty fields to false
+before updating them to the disk.
+The cache_lock is acquired before write-behind starts and is released once it completes.
+This lock ensures that the cache is not accessed while it is being written to disk.
+
 >> C4: Describe your implementation of read-ahead.
+
+Not implemented.
 
 ---- SYNCHRONIZATION ----
 
@@ -115,16 +346,47 @@ FirstName LastName <email@domain.example>
 >> buffer cache block, how are other processes prevented from evicting
 >> that block?
 
+The cache entries are stored in a list. Each time a cache entry is accessed, it
+is pushed to the front of the list. This implies that the least recently used entry
+will reside at the end of the list. 
+
+When an entry needs to be evicted, we go to the last element and check if it is
+currently being used by some process. Each cache entry has an open_count field that
+tells how many processes are currently using it. If open_count is 0, we evict it. Else 
+we don't evict it and try to evict the second last entry in the list and so on.
+
 >> C6: During the eviction of a block from the cache, how are other
 >> processes prevented from attempting to access the block?
+
+Before we access a cache entry, we try to acquire the cache_lock and release it immediately
+if it has been acquired. Otherwise the process blocks. Only after acquiring and releasing
+of the lock can the entry be accessed. This will fail on two occasions, in write-behind and
+eviction. 
+We acquire the cache_lock before evicting an entry from the cache. This lock denies access to
+all entries in the cache during an eviction.
 
 ---- RATIONALE ----
 
 >> C7: Describe a file workload likely to benefit from buffer caching,
 >> and workloads likely to benefit from read-ahead and write-behind.
 
-			   SURVEY QUESTIONS
-			   ================
+Read-ahead:
+Read-ahead is beneficial for a workload where we read data sequentially. That is, if we read
+from a location X and then X+1 and then X+2 and so on, such a workload will benefit from read-
+ahead since after a read to location L, the block at L+1 is pre-fetched.
+
+Write-behind:
+If there are several writes happening successively, then instead of accessing the disk on each
+write, they are stored in the cache and written to disk at one go. This improves performance since
+disk access is slow.
+
+Buffer-cache:
+If we use the same files (read or write) frequently, then the necessary blocks can be directly accessed
+from the buffer cache instead of having to access the disk each time.
+
+
+                           SURVEY QUESTIONS
+                           ================
 
 Answering these questions is optional, but it will help us improve the
 course in future quarters.  Feel free to tell us anything you
@@ -146,3 +408,5 @@ the quarter.
 >> students in future quarters?
 
 >> Any other comments?
+
+

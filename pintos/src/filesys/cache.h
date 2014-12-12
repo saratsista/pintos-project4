@@ -21,14 +21,12 @@ struct cache_entry
 {
   char data[BLOCK_SECTOR_SIZE]; /* Data block in each cache_entry */
   block_sector_t sector;	 /* On-disk sector number for the entry */
-  bool accessed;
   bool dirty;			 /* Dirty bit for cache_entry */
   int open_count;		 /* Number of threads currently accessing 
 				    the entry */
   int  valid_bytes;		 /* Number of valid bytes in this sector*/
   struct lock update_lock;	 /* lock acquired when growing the sector
      				    to set is_growing */
-  bool is_growing;		 /* Boolean to indicate that file is growing */
   struct list_elem elem;
 };
 
